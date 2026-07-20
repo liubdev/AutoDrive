@@ -1,4 +1,4 @@
-# AutoCar
+# AutoDrive
 
 Windows EXE automation framework — **control-driven** (UIA) + **AI** + **vision**.
 
