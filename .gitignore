@@ -1,0 +1,27 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+*.egg
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- AutoCar runtime ---
+data/logs/
+data/reports/
+data/config.json
+
+# --- OS ---
+Thumbs.db
+.DS_Store

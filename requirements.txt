@@ -1,0 +1,10 @@
+# AutoCar 依赖
+pywinauto>=0.6.8          # Windows UI Automation 控件驱动
+comtypes>=1.1.11          # pywinauto 依赖 (COM 接口)
+Pillow>=9.0.0             # 图像处理
+mss>=6.1.0                # 高性能屏幕截图
+pytesseract>=0.3.8        # OCR (需安装 Tesseract-OCR)
+opencv-python>=4.5.5      # 图像匹配/预处理
+openai>=1.0.0             # AI 接口
+PyYAML>=6.0               # 配置文件
+psutil>=5.9.0             # 进程管理
