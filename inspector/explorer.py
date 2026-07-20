@@ -4,6 +4,7 @@ UI control tree explorer - traverse windows, export structure, interactive searc
 Uses UIAElementInfo (low-level API from find_elements) directly for
 consistent behavior across pywinauto versions.
 """
+
 import time
 import logging
 import json
@@ -57,17 +58,21 @@ class UIExplorer:
                 if not w.visible:
                     continue
                 rect = w.rectangle
-                result.append({
-                    "handle": w.handle,
-                    "title": w.name or "",
-                    "class": w.class_name or "",
-                    "rect": {
-                        "left": rect.left, "top": rect.top,
-                        "right": rect.right, "bottom": rect.bottom,
-                        "width": rect.width(),
-                        "height": rect.height(),
-                    },
-                })
+                result.append(
+                    {
+                        "handle": w.handle,
+                        "title": w.name or "",
+                        "class": w.class_name or "",
+                        "rect": {
+                            "left": rect.left,
+                            "top": rect.top,
+                            "right": rect.right,
+                            "bottom": rect.bottom,
+                            "width": rect.width(),
+                            "height": rect.height(),
+                        },
+                    }
+                )
             except Exception:
                 continue
         return result
@@ -86,8 +91,9 @@ class UIExplorer:
 
     # -- Control tree --
 
-    def dump_tree(self, title: str = None, max_depth: int = 8,
-                  handle: int = None) -> List[Dict]:
+    def dump_tree(
+        self, title: str = None, max_depth: int = 8, handle: int = None
+    ) -> List[Dict]:
         """
         Export the hierarchical tree of controls (as JSON-compatible dict)
 
@@ -100,8 +106,7 @@ class UIExplorer:
         if handle is not None:
             windows = [w for w in windows if w.handle == handle]
         elif title:
-            windows = [w for w in windows
-                       if title.lower() in (w.name or "").lower()]
+            windows = [w for w in windows if title.lower() in (w.name or "").lower()]
 
         if not windows:
             logger.warning("No matching windows found (title=%s)", title)
@@ -146,7 +151,8 @@ class UIExplorer:
                 "class": element.class_name or "",
                 "auto_id": element.automation_id or "",
                 "rect": {
-                    "x": rect.left, "y": rect.top,
+                    "x": rect.left,
+                    "y": rect.top,
                     "w": rect.width(),
                     "h": rect.height(),
                 },
@@ -159,8 +165,9 @@ class UIExplorer:
 
     # -- Export --
 
-    def export_tree(self, title: str = None, output: str = None,
-                    max_depth: int = 6) -> str:
+    def export_tree(
+        self, title: str = None, output: str = None, max_depth: int = 6
+    ) -> str:
         """Export control tree to a JSON file"""
         if output is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -181,18 +188,29 @@ class UIExplorer:
 
     # -- Interactive search --
 
-    def find_control(self, title: str = None, auto_id: str = None,
-                     control_type: str = None, name: str = None,
-                     class_name: str = None) -> List[Dict]:
+    def find_control(
+        self,
+        title: str = None,
+        auto_id: str = None,
+        control_type: str = None,
+        name: str = None,
+        class_name: str = None,
+    ) -> List[Dict]:
         """Search for controls matching the given criteria"""
         matches = []
         for w in _get_top_windows(self.backend):
             try:
                 if title and title.lower() not in (w.name or "").lower():
                     continue
-                matches.extend(self._search(w, auto_id=auto_id,
-                               control_type=control_type, name=name,
-                               class_name=class_name))
+                matches.extend(
+                    self._search(
+                        w,
+                        auto_id=auto_id,
+                        control_type=control_type,
+                        name=name,
+                        class_name=class_name,
+                    )
+                )
             except Exception:
                 continue
         return matches
@@ -204,13 +222,24 @@ class UIExplorer:
             for child in parent.children():
                 try:
                     match = True
-                    if criteria.get("auto_id") and criteria["auto_id"] not in (child.automation_id or ""):
+                    if criteria.get("auto_id") and criteria["auto_id"] not in (
+                        child.automation_id or ""
+                    ):
                         match = False
-                    if criteria.get("control_type") and criteria["control_type"] != child.control_type:
+                    if (
+                        criteria.get("control_type")
+                        and criteria["control_type"] != child.control_type
+                    ):
                         match = False
-                    if criteria.get("name") and criteria["name"].lower() not in (child.name or "").lower():
+                    if (
+                        criteria.get("name")
+                        and criteria["name"].lower() not in (child.name or "").lower()
+                    ):
                         match = False
-                    if criteria.get("class_name") and criteria["class_name"] != child.class_name:
+                    if (
+                        criteria.get("class_name")
+                        and criteria["class_name"] != child.class_name
+                    ):
                         match = False
                     if match:
                         results.append(self._describe(child))
@@ -240,12 +269,14 @@ class UIExplorer:
                 windows = _get_top_windows(self.backend)
                 if windows:
                     top = windows[0]
-                    snapshots.append({
-                        "seq": seq,
-                        "timestamp": time.time(),
-                        "active_title": top.name or "",
-                        "active_class": top.class_name or "",
-                    })
+                    snapshots.append(
+                        {
+                            "seq": seq,
+                            "timestamp": time.time(),
+                            "active_title": top.name or "",
+                            "active_class": top.class_name or "",
+                        }
+                    )
                 seq += 1
             except Exception:
                 pass

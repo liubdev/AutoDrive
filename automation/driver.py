@@ -34,6 +34,12 @@ class AppDriver:
 
         Uses subprocess.Popen to avoid pywinauto's WaitForInputIdle hang.
 
+        Window matching strategy (strict priority):
+          1. PID match — window whose process_id equals the subprocess PID
+          2. Exe-in-class match — executable name appears in window class_name
+             (e.g. "Fork" → class="Window") — NO title matching to avoid
+             false positives with terminal tabs
+
         Args:
             path: EXE path (e.g. notepad.exe or C:\\full\\path\\app.exe)
             args: command-line arguments
@@ -50,17 +56,7 @@ class AppDriver:
             cmd_parts.extend(args.split())
         proc = subprocess.Popen(cmd_parts)
 
-        # Infer window title hint from executable name
         exe_name = Path(path).stem.lower()
-        title_keywords = {
-            "notepad": "记事本",
-            "mspaint": "画图",
-            "calc": "计算器",
-            "explorer": "文件资源管理器",
-            "cmd": "命令提示符",
-            "powershell": "Windows PowerShell",
-        }
-        title_hint = title_keywords.get(exe_name, exe_name)
 
         deadline = time.time() + timeout
         matched_window = None
@@ -74,20 +70,18 @@ class AppDriver:
             try:
                 wins = find_elements(backend=settings.uia_backend,
                                      top_level_only=True)
-                # Strategy 1: match by PID
+
+                # Strategy 1: match by PID (MOST reliable)
                 matched = [w for w in wins if w.process_id == proc.pid]
-                # Strategy 2: match by executable name in window class/title
+
+                # Strategy 2: match by executable name in CLASS_NAME only
+                #   (NEVER match by title — title substring matching is
+                #    too prone to false positives with terminal/PowerShell tabs.
+                #    e.g. "fork" should NOT match "Windows控件自动化fork实现")
                 if not matched:
                     matched = [
                         w for w in wins
-                        if (w.name and exe_name.lower() in w.name.lower())
-                        or (w.class_name and exe_name.lower() in w.class_name.lower())
-                    ]
-                # Strategy 3: match by well-known title keywords
-                if not matched:
-                    matched = [
-                        w for w in wins
-                        if w.name and title_hint.lower() in w.name.lower()
+                        if (w.class_name and exe_name.lower() in w.class_name.lower())
                     ]
 
                 if matched:
@@ -96,7 +90,7 @@ class AppDriver:
             except Exception:
                 pass
 
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         if matched_window is None:
             raise RuntimeError(
@@ -118,25 +112,34 @@ class AppDriver:
 
         Connect by one of: path, pid, handle, or window title.
         """
-        kwargs = {"backend": settings.uia_backend}
+        self._app = Application(backend=settings.uia_backend)
+
         if pid:
-            kwargs["process"] = pid
+            self._app.connect(process=pid)
+            conn_by = f"pid={pid}"
         elif handle:
-            kwargs["handle"] = handle
+            self._app.connect(handle=handle)
+            conn_by = f"handle={handle}"
         elif path:
-            kwargs["path"] = path
+            self._app.connect(path=path)
+            conn_by = f"path={path}"
         elif title:
             wins = find_elements(backend=settings.uia_backend, top_level_only=True)
+            matched = None
             for w in wins:
                 if title.lower() in (w.name or "").lower():
-                    kwargs["handle"] = w.handle
+                    matched = w
                     break
-            if "handle" not in kwargs:
+            if matched is None:
                 raise LookupError(f"No window found with title containing '{title}'")
+            self._app.connect(handle=matched.handle)
+            conn_by = f"title='{title}'"
+        else:
+            raise ValueError("Must provide one of: path, pid, handle, title")
 
-        self._app = Application(**kwargs)
-        self._app.connect(**{k: v for k, v in kwargs.items() if k != "backend"})
-        logger.info(f"Connected to process (pid={pid}, path={path})")
+        self._process = psutil.Process(self._app.process)
+        self._executable = self._process.exe()
+        logger.info(f"Connected ({conn_by}), PID={self._app.process}")
         return self
 
     def connect_existing(self, path: str) -> "AppDriver":
@@ -226,8 +229,24 @@ class AppDriver:
             self._process = None
             self._app = None
 
+    def disconnect(self):
+        """
+        Disconnect from the process WITHOUT killing it.
+
+        Use this for apps like Fork/Chrome that should keep running.
+        """
+        if self._app:
+            logger.info("Disconnected from process (process left running)")
+            self._app = None
+            self._process = None
+
     def close(self):
-        """Safely close the window"""
+        """
+        Safely close the application
+
+        Note: Some apps (Fork, Chrome, etc.) should use disconnect()
+        instead to avoid killing them.
+        """
         if self._app:
             try:
                 self._app.kill()
