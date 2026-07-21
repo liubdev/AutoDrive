@@ -81,72 +81,96 @@ class DtsApp(BaseApp):
         logger.error("所有策略均无法找到'确认'按钮")
         return False
 
+    # ── 窗口定位（页面在同一窗口内切换，不用重连） ────────
+
+    def _ensure_window(self, timeout: int = 10) -> bool:
+        """
+        确保当前窗口有效。
+        页面在同一窗口内切换，不关闭窗口，所以不需要重新连接。
+        如果 `self.window` 不可用，按已知标题" DTS服务电话"重新查找。
+        """
+        if self.window:
+            try:
+                self.window.exists()
+                return True
+            except Exception:
+                pass
+        # 按已知对话框标题重新找
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            wins = find_elements(backend="uia", top_level_only=True)
+            for w in wins:
+                try:
+                    if w.class_name == "#32770" and "DTS" in (w.name or ""):
+                        return self._connect_by_handle(w.handle, w.process_id)
+                except Exception:
+                    continue
+            time.sleep(0.5)
+        return False
+
     def one_click_enter(self, timeout: int = 30) -> bool:
         """
-        点击进入系统的按钮(自绘图片按钮，UIA 显示为无名称 "" Button)
-        多策略自动降级:
-          A. OCR 找"点击进入系统"文字
-          B. 通过"车下使用"按钮位置推算下方按钮
-          C. 全窗口遍历找第二个无名称 "" Button
+        点击进入系统的按钮（自绘图片，不在 UIA 树中）
+
+        最稳健方案：以底部导航栏"上翻页"按钮为锚点推算位置。
+        底部按钮是真正的 UIA 控件（有 auto_id="1013"），任何分辨率都能定位。
+        "一键进入"在内容区左上角，跟上翻页左边缘对齐。
         """
-        if not self.window:
-            logger.info("等待 DTS 窗口...")
-            if not self._wait_for_dts_window(timeout):
-                return False
+        if not self._ensure_window(timeout):
+            return False
 
         logger.info("查找进入按钮...")
 
-        # ── 策略 A: OCR 定位 ──
-        logger.info("策略A: OCR 文字定位...")
+        # ── 策略 A: 以底部"上翻页"按钮为锚点（最稳健） ──
+        #   底部按钮 Y=955，内容区高度 = 955
+        #   "一键进入" y=170 → 内容区 170/955 = 17.8%
+        #   "一键进入" x=123 → 跟上翻页左边缘 (x=21) 对齐
+        logger.info("策略A: 以'上翻页'按钮为锚点...")
         try:
-            if self.click_text("点击进入系统", timeout=3):
-                logger.info("✓ 已点击 (策略A: OCR)")
+            # 找底部"上翻页"按钮（auto_id="1013"，一定有）
+            page_up = self.window.child_window(
+                auto_id="1013", control_type="Button"
+            )
+            if page_up.exists(timeout=2):
+                r = page_up.rectangle
+                # "一键进入"左边缘与"上翻页"左边缘对齐
+                target_x = r.left + 102  # 左边缘往右偏移 102px (123-21)
+                # "一键进入"在内容区 17.8% 位置
+                # 内容区底部 = 上翻页按钮的顶部
+                content_bottom = r.top
+                target_y = int(content_bottom * 0.178)
+
+                from pywinauto import mouse
+                mouse.click(coords=(target_x, target_y))
+                logger.info(f"✓ 已点击 (策略A: 锚点推算) ({target_x},{target_y})")
+                time.sleep(2)
+                return True
+        except Exception as e:
+            logger.warning(f"策略A失败: {e}")
+
+        # ── 策略 B: 窗口相对坐标 ──
+        logger.info("策略B: 窗口相对坐标...")
+        try:
+            from vision.locate import ResolutionAdapter
+            adapter = ResolutionAdapter()
+            win_handle = self._window.handle if self._window else None
+            if win_handle:
+                sx, sy = adapter.screen_from_relative(win_handle, 0.064, 0.162)
+                from pywinauto import mouse
+                mouse.click(coords=(sx, sy))
+                logger.info(f"✓ 已点击 (策略B: 相对坐标) ({sx},{sy})")
                 time.sleep(2)
                 return True
         except Exception:
-            logger.warning("策略A失败")
-
-        # ── 策略 B: 通过"车下使用"按钮位置推算下方 ──
-        logger.info("策略B: 通过'车下使用'位置推算下方按钮...")
-        try:
-            for title_text in ("车下使用", "当前设置"):
-                sibling = self.window.child_window(
-                    title=title_text, control_type="Button"
-                )
-                if sibling.exists(timeout=1):
-                    r = sibling.rectangle
-                    # 按钮在"车下使用"下方 -> 取下方居中位置
-                    target_x = r.left + r.width() // 2
-                    target_y = r.bottom + 20  # 下方偏移
-                    from pywinauto import mouse
-
-                    mouse.click(coords=(target_x, target_y))
-                    logger.info(f"✓ 已点击 (策略B: 下方推算) ({target_x},{target_y})")
-                    time.sleep(2)
-                    return True
-        except Exception:
             logger.warning("策略B失败")
 
-        # ── 策略 C: 遍历所有按钮，找"车下使用"后面的无名称按钮 ──
-        logger.info("策略C: 遍历查找无名称按钮...")
+        # ── 策略 C: OCR ──
+        logger.info("策略C: OCR...")
         try:
-            buttons = self.window.descendants(control_type="Button")
-            # 先找到"车下使用"的索引
-            found_car = False
-            for btn in buttons:
-                try:
-                    txt = btn.window_text()
-                    if "车下使用" in txt:
-                        found_car = True
-                        continue
-                    if found_car:
-                        # "车下使用"之后的下一个按钮就是目标
-                        btn.click()
-                        logger.info("✓ 已点击 (策略C: 顺序遍历)")
-                        time.sleep(2)
-                        return True
-                except Exception:
-                    continue
+            if self.click_text("一键", timeout=3):
+                logger.info("✓ 已点击 (策略C: OCR)")
+                time.sleep(2)
+                return True
         except Exception:
             logger.warning("策略C失败")
 
@@ -154,42 +178,13 @@ class DtsApp(BaseApp):
         return False
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
-        """
-        发动机系统诊断
-        """
-        if not self.window:
-            logger.info("等待 DTS 窗口...")
-            if not self._wait_for_dts_window(timeout):
-                return False
-
-        # logger.info("查找'发动机系统诊断'按钮...")
-
-        # # 策略 A: OCR 双击
-        # logger.info("策略A: OCR 双击定位...")
-        # try:
-        #     if self.double_click_text("发动机系统诊断", timeout=3):
-        #         logger.info("✓ 已双击 (策略A: OCR)")
-        #         time.sleep(2)
-        #         return True
-        # except Exception:
-        #     logger.warning("策略A失败")
-
-        # # 策略 B: 图片模板匹配双击
-        # logger.info("策略B: 图片模板匹配双击...")
-        # try:
-        #     if self.double_click_image("dts_engine_diag.png", threshold=0.7, timeout=3):
-        #         logger.info("✓ 已双击 (策略B: 图片)")
-        #         time.sleep(2)
-        #         return True
-        # except Exception:
-        #     logger.warning("策略B失败")
-
-        # logger.error("无法找到'发动机系统诊断'按钮")
-        # return False
-
-        # 选项默认选中 发送Enter指令
-        logger.info("选项默认选中 发送Enter指令 '发动机系统诊断'选项")
+        """发动机系统诊断 —— 选项默认已选中，直接 Enter"""
+        if not self._ensure_window(timeout):
+            return False
+        logger.info("发动机系统诊断: 发送 Enter")
         self.send_enter()
+        time.sleep(2)
+        return True
 
     # ── 窗口匹配 ──────────────────────────────────────
 
