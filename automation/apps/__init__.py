@@ -327,6 +327,218 @@ class BaseApp:
         except Exception:
             return None
 
+    # ── 图片/文字定位（处理自绘控件、图片按钮） ──────────
+
+    def click_image(
+        self, template_name: str, threshold: float = 0.8, timeout: int = 10
+    ) -> bool:
+        """
+        通过模板匹配点击图片按钮
+
+        Args:
+            template_name: data/templates/ 下的图片文件名
+            threshold: 匹配阈值 0~1
+            timeout: 超时秒数
+
+        用法:
+            # 先截图按钮保存到 data/templates/dts_confirm.png
+            app.click_image("dts_confirm.png")
+        """
+        from vision.locate import ImageLocator
+
+        locator = ImageLocator()
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            handle = self._window.handle if self._window else None
+            result = locator.find_image(
+                template_name, window_handle=handle, threshold=threshold
+            )
+            if result:
+                return locator.click(result)
+            time.sleep(0.5)
+
+        logger.warning(f"图片 '{template_name}' 在 {timeout}s 内未出现")
+        return False
+
+    def click_text(self, text: str, timeout: int = 10) -> bool:
+        """
+        通过 OCR 识别文字并点击
+
+        Args:
+            text: 要识别的文字（支持中文）
+            timeout: 超时秒数
+
+        用法:
+            app.click_text("确认")       # 找到"确认"文字位置并点击
+            app.click_text("提交申请")
+        """
+        from vision.locate import ImageLocator
+
+        locator = ImageLocator()
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            handle = self._window.handle if self._window else None
+            result = locator.find_text(text, window_handle=handle)
+            if result:
+                return locator.click(result)
+            time.sleep(0.5)
+
+        logger.warning(f"文字 '{text}' 在 {timeout}s 内未找到")
+        return False
+
+    def double_click_text(self, text: str, timeout: int = 10) -> bool:
+        """通过 OCR 找到文字并双击"""
+        from vision.locate import ImageLocator
+
+        locator = ImageLocator()
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            handle = self._window.handle if self._window else None
+            result = locator.find_text(text, window_handle=handle)
+            if result:
+                return locator.double_click(result)
+            time.sleep(0.5)
+        return False
+
+    def double_click_image(
+        self, template_name: str, threshold: float = 0.8, timeout: int = 10
+    ) -> bool:
+        """通过模板匹配找到图片并双击"""
+        from vision.locate import ImageLocator
+
+        locator = ImageLocator()
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            handle = self._window.handle if self._window else None
+            result = locator.find_image(
+                template_name, window_handle=handle, threshold=threshold
+            )
+            if result:
+                return locator.double_click(result)
+            time.sleep(0.5)
+        return False
+
+    def double_click_at(
+        self, x: int, y: int, ref_resolution: Tuple[int, int] = None
+    ) -> bool:
+        """按坐标双击（自动适配分辨率）"""
+        from vision.locate import ResolutionAdapter
+
+        adapter = ResolutionAdapter(reference=ref_resolution or (1920, 1080))
+        sx, sy = adapter.scale(x, y)
+        try:
+            from pywinauto import mouse
+
+            mouse.double_click(coords=(sx, sy))
+            logger.info(f"  双击 ({sx}, {sy}) [原始 ({x},{y})]")
+            time.sleep(settings.action_delay)
+            return True
+        except Exception as e:
+            logger.error(f"双击失败: {e}")
+            return False
+
+    # ── 键盘操作 ──────────────────────────────────────
+
+    def send_enter(self, times: int = 1):
+        """
+        发送 Enter 键
+
+        有的页面进入后按 Enter 即可触发下一步。
+
+        Args:
+            times: 按几次，默认 1 次
+
+        用法:
+            app.send_enter()       # 按一次 Enter
+            app.send_enter(3)      # 连按 3 次
+        """
+        from pywinauto.keyboard import send_keys
+
+        for _ in range(times):
+            send_keys("{ENTER}")
+            time.sleep(0.1)
+        logger.info(f"  Enter x{times}")
+        return self
+
+    def send_keys(self, keys: str):
+        """
+        发送任意键盘按键
+
+        Args:
+            keys: pywinauto 键盘语法
+                 例如: "^a" (Ctrl+A), "%{F4}" (Alt+F4), "{TAB 3}"
+
+        用法:
+            app.send_keys("^a")       # Ctrl+A 全选
+            app.send_keys("{TAB 2}")  # Tab 两次
+            app.send_keys("%{F4}")    # Alt+F4 关闭
+        """
+        from pywinauto.keyboard import send_keys
+
+        send_keys(keys)
+        logger.info(f"  Keys: {keys}")
+        return self
+
+    def wait_for_image(self, template_name: str, timeout: int = 30) -> bool:
+        """等待图片出现（用于确认页面切换完成）"""
+        from vision.locate import ImageLocator
+
+        locator = ImageLocator()
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            handle = self._window.handle if self._window else None
+            result = locator.find_image(
+                template_name, window_handle=handle, threshold=0.7
+            )
+            if result:
+                logger.info(f"✓ 图片 '{template_name}' 已出现")
+                return True
+            time.sleep(0.5)
+
+        logger.warning(f"图片 '{template_name}' 在 {timeout}s 内未出现")
+        return False
+
+    # ── 分辨率自适应（硬编码坐标 + 多屏适配） ───────────
+
+    def click_at(
+        self,
+        x: int,
+        y: int,
+        ref_resolution: Tuple[int, int] = None,
+        button: str = "left",
+    ) -> bool:
+        """
+        按坐标点击（自动适配当前分辨率）
+
+        Args:
+            x, y: 参考分辨率下的坐标
+            ref_resolution: 参考分辨率，默认 (1920, 1080)
+            button: left/right
+
+        用法:
+            # 在 1920x1080 上截图测得按钮在 (855, 956)
+            # 在 2560x1440 上自动缩放
+            app.click_at(855, 956)
+        """
+        from vision.locate import ResolutionAdapter
+
+        adapter = ResolutionAdapter(reference=ref_resolution or (1920, 1080))
+        sx, sy = adapter.scale(x, y)
+
+        try:
+            from pywinauto import mouse
+
+            mouse.click(button=button, coords=(sx, sy))
+            logger.info(f"  坐标点击 ({sx}, {sy}) [原始 ({x},{y})]")
+            time.sleep(settings.action_delay)
+            return True
+        except Exception as e:
+            logger.error(f"坐标点击失败: {e}")
+            return False
+
     def menu_select(self, path: str):
         """
         选择菜单项 (格式: "Menu->Submenu->Command")
