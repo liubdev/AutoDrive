@@ -81,120 +81,142 @@ class DtsApp(BaseApp):
         logger.error("所有策略均无法找到'确认'按钮")
         return False
 
-    # ── 窗口定位（页面在同一窗口内切换，不用重连） ────────
+    # ── 重新连接（关键：确认对话框关闭后需连到主窗口） ─────
 
-    def _ensure_window(self, timeout: int = 10) -> bool:
+    def _reconnect_main(self, timeout: int = 15) -> bool:
         """
-        确保当前窗口有效。
-        页面在同一窗口内切换，不关闭窗口，所以不需要重新连接。
-        如果 `self.window` 不可用，按已知标题" DTS服务电话"重新查找。
+        点击"确认"后旧对话框关闭，重连到 DTS650 主窗口
+
+        新窗口特征:
+          - 类名: CDTS650MainClass  (主窗口)
+          - 或:   #32770            (内容面板，标题含 "DTS服务电话")
+          - 包含底部按钮: 上翻页 (auto_id=1013)
         """
-        if self.window:
-            try:
-                self.window.exists()
-                return True
-            except Exception:
-                pass
-        # 按已知对话框标题重新找
         deadline = time.time() + timeout
         while time.time() < deadline:
-            wins = find_elements(backend="uia", top_level_only=True)
-            for w in wins:
-                try:
-                    if w.class_name == "#32770" and "DTS" in (w.name or ""):
-                        return self._connect_by_handle(w.handle, w.process_id)
-                except Exception:
-                    continue
+            try:
+                wins = find_elements(backend="uia", top_level_only=True)
+                for w in wins:
+                    try:
+                        if w.class_name == "CDTS650MainClass":
+                            logger.info(f"找到主窗口 DTS650 (handle={w.handle})")
+                            return self._connect_by_handle(w.handle, w.process_id)
+                    except Exception:
+                        continue
+
+                for w in wins:
+                    try:
+                        if w.class_name == "#32770" and "DTS" in (w.name or ""):
+                            logger.info(f"找到 DTS 对话框 (handle={w.handle})")
+                            return self._connect_by_handle(w.handle, w.process_id)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
             time.sleep(0.5)
+
+        logger.warning("重连 DTS 主窗口超时")
         return False
 
     def one_click_enter(self, timeout: int = 30) -> bool:
         """
-        点击进入系统的按钮（自绘图片，不在 UIA 树中）
-
-        最稳健方案：以底部导航栏"上翻页"按钮为锚点推算位置。
-        底部按钮是真正的 UIA 控件（有 auto_id="1013"），任何分辨率都能定位。
-        "一键进入"在内容区左上角，跟上翻页左边缘对齐。
+        点击"一键进入"按钮（自绘图片，位置 123,170）
+        以"上翻页"为锚点推算，跨分辨率自适应。
         """
-        if not self._ensure_window(timeout):
+        if not self._reconnect_main(timeout):
             return False
-
-        logger.info("查找进入按钮...")
-
-        # ── 策略 A: 以底部"上翻页"按钮为锚点（最稳健） ──
-        #   底部按钮 Y=955，内容区高度 = 955
-        #   "一键进入" y=170 → 内容区 170/955 = 17.8%
-        #   "一键进入" x=123 → 跟上翻页左边缘 (x=21) 对齐
-        logger.info("策略A: 以'上翻页'按钮为锚点...")
-        try:
-            # 找底部"上翻页"按钮（auto_id="1013"，一定有）
-            page_up = self.window.child_window(
-                auto_id="1013", control_type="Button"
-            )
-            if page_up.exists(timeout=2):
-                r = page_up.rectangle
-                # "一键进入"左边缘与"上翻页"左边缘对齐
-                target_x = r.left + 102  # 左边缘往右偏移 102px (123-21)
-                # "一键进入"在内容区 17.8% 位置
-                # 内容区底部 = 上翻页按钮的顶部
-                content_bottom = r.top
-                target_y = int(content_bottom * 0.178)
-
-                from pywinauto import mouse
-                mouse.click(coords=(target_x, target_y))
-                logger.info(f"✓ 已点击 (策略A: 锚点推算) ({target_x},{target_y})")
-                time.sleep(2)
-                return True
-        except Exception as e:
-            logger.warning(f"策略A失败: {e}")
-
-        # ── 策略 B: 窗口相对坐标 ──
-        logger.info("策略B: 窗口相对坐标...")
+        logger.info("以'上翻页'按钮为锚点，推算'一键进入'...")
+        if self._click_image_btn(offset_x=102, ratio_y=0.178):
+            return True
+        # 降级：窗口相对坐标
+        logger.info("降级: 窗口相对坐标...")
         try:
             from vision.locate import ResolutionAdapter
             adapter = ResolutionAdapter()
-            win_handle = self._window.handle if self._window else None
-            if win_handle:
-                sx, sy = adapter.screen_from_relative(win_handle, 0.064, 0.162)
-                from pywinauto import mouse
-                mouse.click(coords=(sx, sy))
-                logger.info(f"✓ 已点击 (策略B: 相对坐标) ({sx},{sy})")
-                time.sleep(2)
-                return True
+            sx, sy = adapter.screen_from_relative(self._window.handle, 0.064, 0.162)
+            from pywinauto import mouse
+            mouse.click(coords=(sx, sy))
+            logger.info(f"✓ 已点击 ({sx},{sy})")
+            time.sleep(2)
+            return True
         except Exception:
-            logger.warning("策略B失败")
-
-        # ── 策略 C: OCR ──
-        logger.info("策略C: OCR...")
-        try:
-            if self.click_text("一键", timeout=3):
-                logger.info("✓ 已点击 (策略C: OCR)")
-                time.sleep(2)
-                return True
-        except Exception:
-            logger.warning("策略C失败")
-
-        logger.error("所有策略均无法找到进入按钮")
+            pass
         return False
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
         """发动机系统诊断 —— 选项默认已选中，直接 Enter"""
-        if not self._ensure_window(timeout):
+        if not self._reconnect_main(timeout):
             return False
         logger.info("发动机系统诊断: 发送 Enter")
         self.send_enter()
         time.sleep(2)
         return True
 
+    def enter_system(self, timeout: int = 30) -> bool:
+        """
+        点击"点击进入系统"按钮（自绘图片）
+
+        用"当前设置:车下使用"文本控件(auto_id="1185")做锚点:
+          - 它就在按钮正上方，是 UIA 真控件
+          - 按钮中心 ≈ 文本底部往下偏移 63px, 文本左边缘偏移 125px
+        """
+        if not self._reconnect_main(timeout):
+            return False
+        return self._click_below_text(auto_id="1185", offset_x=125, offset_y=65)
+
+    # ── 通用：在指定文本控件下方点击 ─────────────────
+
+    def _click_below_text(self, auto_id: str, offset_x: int, offset_y: int) -> bool:
+        """
+        找到文本控件，在其下方偏移位置点击
+
+        Args:
+            auto_id: 文本控件的 AutomationId
+            offset_x: 距文本左边缘的 X 偏移
+            offset_y: 距文本底部的 Y 偏移
+        """
+        try:
+            text = self.window.child_window(auto_id=auto_id, control_type="Text",
+                                            found_index=0)
+            if text.exists(timeout=3):
+                r = text.rectangle()
+                target_x = r.left + offset_x
+                target_y = r.bottom + offset_y
+                from pywinauto import mouse
+                mouse.click(coords=(target_x, target_y))
+                logger.info(f"✓ 已点击 ({target_x},{target_y}) [在 {auto_id} 下方]")
+                time.sleep(2)
+                return True
+        except Exception as e:
+            logger.warning(f"文本锚点点击失败: {e}")
+        return False
+
+    # ── 通用图片按钮点击（以"上翻页"为锚点） ──────────
+
+    def _click_image_btn(self, offset_x: int, ratio_y: float) -> bool:
+        """
+        以底部"上翻页"按钮(auto_id="1013")为锚点推算位置
+        """
+        try:
+            page_up = self.window.child_window(auto_id="1013", control_type="Button")
+            if page_up.exists(timeout=3):
+                r = page_up.rectangle()
+                target_x = r.left + offset_x
+                target_y = int(r.top * ratio_y)
+                from pywinauto import mouse
+                mouse.click(coords=(target_x, target_y))
+                logger.info(f"✓ 已点击图片按钮 ({target_x},{target_y})")
+                time.sleep(2)
+                return True
+        except Exception as e:
+            logger.warning(f"图片按钮点击失败: {e}")
+        return False
+
     # ── 窗口匹配 ──────────────────────────────────────
 
     def _wait_for_dts_window(self, timeout: int = 30):
         """
         等待 DTS 窗口出现
-
-        DTS 的窗口特征是:
-          - class_name = "#32770" (标准对话框类)
-          - 包含 splash 页面和"确认"按钮
         """
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -204,7 +226,6 @@ class DtsApp(BaseApp):
                 for w in wins:
                     try:
                         if w.class_name == "#32770":
-                            # 验证：检查是否包含"确认"按钮
                             for child in w.children():
                                 try:
                                     if child.name == "确认":
