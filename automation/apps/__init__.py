@@ -462,6 +462,27 @@ class BaseApp:
         logger.info(f"  Enter x{times}")
         return self
 
+    def send_space(self, times: int = 1):
+        """
+        发送 Space 键
+
+        有的页面进入后按 Space 即可触发下一步。
+
+        Args:
+            times: 按几次，默认 1 次
+
+        用法:
+            app.send_space()       # 按一次 Space
+            app.send_space(3)      # 连按 3 次
+        """
+        from pywinauto.keyboard import send_keys
+
+        for _ in range(times):
+            send_keys("{SPACE}")
+            time.sleep(0.1)
+        logger.info(f"  Space x{times}")
+        return self
+
     def send_keys(self, keys: str):
         """
         发送任意键盘按键

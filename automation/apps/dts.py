@@ -7,11 +7,10 @@ import logging
 import subprocess
 from pathlib import Path
 from typing import Optional
-
-from pywinauto import Application
 from pywinauto.findwindows import find_elements
 
 from . import BaseApp
+from config import settings
 
 logger = logging.getLogger("autocar.apps.dts")
 
@@ -24,13 +23,8 @@ class DtsApp(BaseApp):
 
     def confirm(self, timeout: int = 30) -> bool:
         """
-        点击启动后的"确认"按钮
-
-        DTS 启动后显示 splash 页 + 确认对话框。
-        点击"确认"后对话框关闭，进入主界面。
-
-        Returns:
-            True 如果已点击"确认"
+        DTS 启动后显示 splash 页。
+        点击"确认"，进入主界面。
         """
         if not self.window:
             # 如果还没连接，等窗口出现
@@ -132,9 +126,11 @@ class DtsApp(BaseApp):
         logger.info("降级: 窗口相对坐标...")
         try:
             from vision.locate import ResolutionAdapter
+
             adapter = ResolutionAdapter()
             sx, sy = adapter.screen_from_relative(self._window.handle, 0.064, 0.162)
             from pywinauto import mouse
+
             mouse.click(coords=(sx, sy))
             logger.info(f"✓ 已点击 ({sx},{sy})")
             time.sleep(2)
@@ -143,26 +139,50 @@ class DtsApp(BaseApp):
             pass
         return False
 
-    def diagnose_engine_system(self, timeout: int = 30) -> bool:
-        """发动机系统诊断 —— 选项默认已选中，直接 Enter"""
-        if not self._reconnect_main(timeout):
-            return False
-        logger.info("发动机系统诊断: 发送 Enter")
-        self.send_enter()
-        time.sleep(2)
-        return True
-
     def enter_system(self, timeout: int = 30) -> bool:
-        """
-        点击"点击进入系统"按钮（自绘图片）
-
-        用"当前设置:车下使用"文本控件(auto_id="1185")做锚点:
-          - 它就在按钮正上方，是 UIA 真控件
-          - 按钮中心 ≈ 文本底部往下偏移 63px, 文本左边缘偏移 125px
-        """
+        """点击"点击进入系统"按钮（自绘图片）"""
         if not self._reconnect_main(timeout):
             return False
         return self._click_below_text(auto_id="1185", offset_x=125, offset_y=65)
+
+    def save_info_to_txt(self, output: str = None) -> Optional[str]:
+        """
+        保存弹窗中的诊断信息到 txt 文件
+
+        从 auto_id="1202" 的文本控件读取 VIN/ECU 等信息。
+
+        Args:
+            output: 保存路径，默认 data/reports/dtc_xxx.txt
+
+        Returns:
+            文件路径，失败返回 None
+        """
+        try:
+            edit = self.window.child_window(
+                auto_id="1202", control_type="Edit", found_index=0
+            )
+            if not edit.exists(timeout=3):
+                logger.warning("未找到诊断信息控件 (auto_id=1202)")
+                return None
+
+            text = edit.window_text()
+            if not text.strip():
+                text = edit.element_info.value  # 兜底用 ValuePattern
+
+            if output is None:
+                from datetime import datetime
+
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output = str(settings.reports_dir / f"dtc_{ts}.txt")
+
+            with open(output, "w", encoding="utf-8") as f:
+                f.write(text)
+
+            logger.info(f"诊断信息已保存: {output}")
+            return output
+        except Exception as e:
+            logger.error(f"保存诊断信息失败: {e}")
+            return None
 
     # ── 通用：在指定文本控件下方点击 ─────────────────
 
@@ -176,13 +196,15 @@ class DtsApp(BaseApp):
             offset_y: 距文本底部的 Y 偏移
         """
         try:
-            text = self.window.child_window(auto_id=auto_id, control_type="Text",
-                                            found_index=0)
+            text = self.window.child_window(
+                auto_id=auto_id, control_type="Text", found_index=0
+            )
             if text.exists(timeout=3):
                 r = text.rectangle()
                 target_x = r.left + offset_x
                 target_y = r.bottom + offset_y
                 from pywinauto import mouse
+
                 mouse.click(coords=(target_x, target_y))
                 logger.info(f"✓ 已点击 ({target_x},{target_y}) [在 {auto_id} 下方]")
                 time.sleep(2)
@@ -204,6 +226,7 @@ class DtsApp(BaseApp):
                 target_x = r.left + offset_x
                 target_y = int(r.top * ratio_y)
                 from pywinauto import mouse
+
                 mouse.click(coords=(target_x, target_y))
                 logger.info(f"✓ 已点击图片按钮 ({target_x},{target_y})")
                 time.sleep(2)
