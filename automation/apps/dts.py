@@ -139,6 +139,22 @@ class DtsApp(BaseApp):
             pass
         return False
 
+    def send_enter(self, timeout: int = 15) -> bool:
+        """发送 Enter（先重连，兼容旧脚本）"""
+        if not self._reconnect_main(timeout):
+            return False
+        super().send_enter()
+        time.sleep(2)
+        return True
+
+    def send_space(self, timeout: int = 15) -> bool:
+        """发送 Space（先重连，兼容旧脚本）"""
+        if not self._reconnect_main(timeout):
+            return False
+        super().send_space()
+        time.sleep(2)
+        return True
+
     def enter_system(self, timeout: int = 30) -> bool:
         """点击"点击进入系统"按钮（自绘图片）"""
         if not self._reconnect_main(timeout):
