@@ -25,7 +25,7 @@ class Settings:
 
     # --- Vision ---
     screenshot_format: str = "png"
-    ocr_lang: str = "chi_sim+eng"      # Tesseract language pack
+    ocr_lang: str = "zh-CN"            # Windows OCR 语言
 
     # --- AI ---
     ai_provider: str = "openai"        # openai / azure / local

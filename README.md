@@ -1,45 +1,41 @@
 # AutoDrive
 
-Windows EXE automation framework — **control-driven** (UIA) + **AI** + **vision**.
+Windows 应用自动化框架 — **UIA 驱动** + **OCR (Windows 内置)** + **图片模板匹配**。
 
-## Quick start
+## 安装
 
 ```bash
-pip install -r requirements.txt
+pip install pywinauto psutil opencv-python numpy pillow mss winsdk
 ```
 
-## CLI Usage
+## 使用
 
-```
-python main.py explore              List all desktop windows
-python main.py explore "Chrome"     Probe a running app's controls
-python main.py inspect notepad.exe  Launch app and inspect its controls
-python main.py goal "type Hello"    AI-driven natural language execution
-python main.py run app.exe steps.json  Execute JSON step script
-python main.py script demo.py       Execute Python script
-python main.py record app.exe 10    Record window state snapshots
+```bash
+python main.py script scripts/run_dts.py
 ```
 
-## Code usage
-
-```python
-from agent import AutoController
-
-with AutoController() as ctrl:
-    ctrl.launch("notepad.exe")
-    ctrl.click("Edit", by="auto_id")    # use auto_id
-    ctrl.click("Bold(Ctrl+B)", by="text")  # use text
-    ctrl.type_text("", "Hello", by="auto_id")
-```
-
-## Architecture
+## 项目结构
 
 ```
-config/     Global settings
-automation/ Driver, Locator, Actions (core UIA control layer)
-inspector/  UI control tree explorer
-vision/     Screenshot + OCR (Tesseract)
-ai/         LLM client (OpenAI) + prompt templates
-agent/      Controller, State, Workflow engine
-main.py     CLI entry point
+AutoDrive/
+├── automation/apps/     核心：BaseApp（基类）+ 各应用模块
+│   ├── __init__.py      BaseApp：窗口连接/控件定位/OCR/键盘
+│   └── dts.py           DTS 诊断仪自动化
+├── vision/              视觉识别
+│   ├── ocr.py           Windows 内置 OCR（无需安装）
+│   ├── locate.py        图片模板匹配（跨分辨率）
+│   └── screenshot.py    截图
+├── config/settings.py   全局配置
+├── scripts/             自动化脚本
+├── main.py              入口
+└── build_exe.py         打包
 ```
+
+## 自绘按钮定位策略
+
+| 方式 | 方法 | 跨分辨率 |
+|------|------|---------|
+| UIA 控件 | `child_window(auto_id=...)`|
+| OCR 文字 | `click_text("按钮名")`|
+| 图片模板 | `click_image("模板.png")`|
+| 锚点比例 | `_click_below_text(rx, ry)`|

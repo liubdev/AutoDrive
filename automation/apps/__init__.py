@@ -279,54 +279,6 @@ class BaseApp:
             logger.error(f"连接失败: {e}")
             return False
 
-    # ── 控件定位便捷方法 ──────────────────────────────────
-
-    def click_by_auto_id(self, auto_id: str, timeout: int = 5) -> bool:
-        """按 auto_id 点击控件"""
-        if not self.window:
-            return False
-        try:
-            ctrl = self.window.child_window(auto_id=auto_id, control_type="Button")
-            if ctrl.exists(timeout=timeout):
-                ctrl.click()
-                return True
-        except Exception as e:
-            logger.warning(f"click_by_auto_id({auto_id}) 失败: {e}")
-        return False
-
-    def click_by_text(self, text: str, timeout: int = 5) -> bool:
-        """按文字内容点击控件"""
-        if not self.window:
-            return False
-        # 策略1: MenuItem
-        for ct in ("MenuItem", "Button", "Text", "Hyperlink"):
-            try:
-                ctrl = self.window.child_window(title=text, control_type=ct)
-                if ctrl.exists(timeout=1):
-                    ctrl.click()
-                    return True
-            except Exception:
-                continue
-        # 策略2: 遍历
-        try:
-            ctrl = self.window.child_window(title=text)
-            if ctrl.exists(timeout=timeout):
-                ctrl.click()
-                return True
-        except Exception:
-            pass
-        return False
-
-    def find_element(self, **criteria):
-        """通用元素查找"""
-        if not self.window:
-            return None
-        try:
-            ctrl = self.window.child_window(**criteria)
-            return ctrl if ctrl.exists(timeout=5) else None
-        except Exception:
-            return None
-
     # ── 图片/文字定位（处理自绘控件、图片按钮） ──────────
 
     def click_image(
@@ -420,25 +372,6 @@ class BaseApp:
             time.sleep(0.5)
         return False
 
-    def double_click_at(
-        self, x: int, y: int, ref_resolution: Tuple[int, int] = None
-    ) -> bool:
-        """按坐标双击（自动适配分辨率）"""
-        from vision.locate import ResolutionAdapter
-
-        adapter = ResolutionAdapter(reference=ref_resolution or (1920, 1080))
-        sx, sy = adapter.scale(x, y)
-        try:
-            from pywinauto import mouse
-
-            mouse.double_click(coords=(sx, sy))
-            logger.info(f"  双击 ({sx}, {sy}) [原始 ({x},{y})]")
-            time.sleep(settings.action_delay)
-            return True
-        except Exception as e:
-            logger.error(f"双击失败: {e}")
-            return False
-
     # ── 键盘操作 ──────────────────────────────────────
 
     def send_enter(self, times: int = 1):
@@ -524,41 +457,7 @@ class BaseApp:
 
     # ── 分辨率自适应（硬编码坐标 + 多屏适配） ───────────
 
-    def click_at(
-        self,
-        x: int,
-        y: int,
-        ref_resolution: Tuple[int, int] = None,
-        button: str = "left",
-    ) -> bool:
-        """
-        按坐标点击（自动适配当前分辨率）
-
-        Args:
-            x, y: 参考分辨率下的坐标
-            ref_resolution: 参考分辨率，默认 (1920, 1080)
-            button: left/right
-
-        用法:
-            # 在 1920x1080 上截图测得按钮在 (855, 956)
-            # 在 2560x1440 上自动缩放
-            app.click_at(855, 956)
-        """
-        from vision.locate import ResolutionAdapter
-
-        adapter = ResolutionAdapter(reference=ref_resolution or (1920, 1080))
-        sx, sy = adapter.scale(x, y)
-
-        try:
-            from pywinauto import mouse
-
-            mouse.click(button=button, coords=(sx, sy))
-            logger.info(f"  坐标点击 ({sx}, {sy}) [原始 ({x},{y})]")
-            time.sleep(settings.action_delay)
-            return True
-        except Exception as e:
-            logger.error(f"坐标点击失败: {e}")
-            return False
+    # def click_at 已移除 —— 像素坐标跨分辨率不可靠，改用锚点比例
 
     def menu_select(self, path: str):
         """
