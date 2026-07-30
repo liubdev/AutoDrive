@@ -145,6 +145,77 @@ class DtsApp(BaseApp):
             return last
         return None
 
+    # ── 逐行复制（不确定行数，复制到内容重复为止） ─────
+
+    def copy_all_rows(self, copy_btn_id: str, max_rows: int = 20) -> list:
+        """
+        逐行选中 → 点击复制 → 对比剪贴板，内容重复则停止
+
+        Args:
+            copy_btn_id: 复制按钮的 auto_id
+            max_rows: 最大复制行数（防止死循环）
+
+        Returns:
+            所有复制到的内容列表
+        """
+        import tkinter as tk
+
+        root = tk.Tk()
+        root.withdraw()
+
+        results = []
+        last_text = None
+
+        for i in range(max_rows):
+            # 下移到下一行
+            if i > 0:
+                from pywinauto.keyboard import send_keys
+
+                send_keys("{DOWN}")
+                time.sleep(0.2)
+
+            # 点击复制按钮
+            btn = self.window.child_window(
+                auto_id=copy_btn_id, control_type="Button", found_index=0
+            )
+            if not btn.exists(timeout=2):
+                logger.warning(f"复制按钮 (auto_id={copy_btn_id}) 不存在")
+                break
+            btn.click_input()
+            time.sleep(0.3)
+
+            # 复制成功提示 → 回车关闭
+            from pywinauto.keyboard import send_keys as _keys
+
+            _keys("{ENTER}")
+            time.sleep(0.2)
+
+            # 读剪贴板
+            try:
+                root.clipboard_clear()
+                time.sleep(0.1)
+                text = root.clipboard_get()
+            except Exception:
+                text = ""
+
+            text = text.strip()
+            if not text:
+                logger.info(f"  第{i+1}行: 空，停止")
+                break
+
+            # 对比上一次
+            if last_text is not None and text == last_text:
+                logger.info(f"  第{i+1}行: 内容重复，复制完成")
+                break
+
+            results.append(text)
+            last_text = text
+            logger.info(f"  第{i+1}行: {text[:60]}...")
+
+        root.destroy()
+        logger.info(f"  共复制 {len(results)} 行")
+        return results
+
     # ═══════════════════════════════════════════════
     #  自绘按钮定位（跨分辨率，相对比例）
     # ═══════════════════════════════════════════════

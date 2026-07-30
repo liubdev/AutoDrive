@@ -75,6 +75,25 @@ def main():
     ok = app.send_space(timeout=15)
     step(8, "空格确认", ok)
 
+    # 进入故障码选项
+    app.send_keys("{ENTER}")
+    # ── 获取故障码 ──
+    data = app.copy_all_rows(copy_btn_id="1011")
+    if data:
+        root = Path(__file__).resolve().parent.parent
+        out = root / "故障码.txt"
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("\n".join(data))
+        log.info(f"  故障码已保存: {out}")
+
+    # ── 返回导航到数据流 ──
+    back_btn = app.window.child_window(
+        auto_id="2", control_type="Button", found_index=0
+    )
+    if back_btn.exists(timeout=3):
+        log.info("点击 返回 按钮")
+        back_btn.click_input()
+
     # ── 导航到数据流 ──
     app.send_keys("{DOWN 2}{ENTER}")
     time.sleep(2)
@@ -94,8 +113,8 @@ def main():
                     auto_id=aid, control_type="CheckBox", found_index=0
                 )
                 if cb.exists(timeout=0.5) and cb.get_toggle_state() == 0:
-                    cb.click()
-            right_btn.click()
+                    cb.click_input()
+            right_btn.click_input()
             time.sleep(0.5)
 
     # ── 保存列表 ──
@@ -104,7 +123,8 @@ def main():
     save_btn = app.window.child_window(
         auto_id="1013", control_type="Button", found_index=0
     )
-    save_btn.click()
+    log.info("点击 保存列表 按钮")
+    save_btn.click_input()
     time.sleep(0.5)
     kb.send_keys("DataFlow_List_All.txt{ENTER}")
 
@@ -114,17 +134,19 @@ def main():
             title="是(Y)", control_type="Button", found_index=0
         )
         if btn.exists(timeout=0.5):
-            btn.click()
+            btn.click_input()
             break
         time.sleep(0.3)
+    time.sleep(2)
+    kb.send_keys("{ENTER}{ENTER}")
 
     # ── 载入列表 ──
     load_btn = app.window.child_window(
         auto_id="1118", control_type="Button", found_index=0
     )
-    if load_btn.exists(timeout=3):
-        load_btn.click()
-    kb.send_keys("DataFlow_List_All.txt{ENTER}{ENTER}")
+    log.info("点击 载入列表 按钮")
+    load_btn.click_input()
+    kb.send_keys("DataFlow_List_All.txt{ENTER}{ENTER}{ENTER}")
     time.sleep(10)
 
     # ── 返回 + 确认 ──
@@ -132,14 +154,15 @@ def main():
         auto_id="1042", control_type="Button", found_index=0
     )
     if back_btn.exists(timeout=3):
-        back_btn.click()
+        log.info("点击 返回 按钮")
+        back_btn.click_input()
     time.sleep(12)
 
     exit_btn = app.window.child_window(
         auto_id="1", control_type="Button", found_index=0
     )
     if exit_btn.exists(timeout=3):
-        exit_btn.click()
+        exit_btn.click_input()
 
     # ── 读取保存路径 ──
     time.sleep(1)
@@ -150,5 +173,4 @@ def main():
     log.info("[完成]")
 
 
-if __name__ == "__main__":
-    main()
+main()
