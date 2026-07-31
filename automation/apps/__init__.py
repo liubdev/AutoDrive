@@ -435,6 +435,37 @@ class BaseApp:
         logger.info(f"  Keys: {keys}")
         return self
 
+    def wait_for_control(self, auto_id: str, control_type: str = "Button",
+                         timeout: int = 30) -> bool:
+        """
+        等待指定控件出现（用于确认页面切换完成）
+
+        替代写死的 time.sleep，页面出现目标控件后立即继续。
+
+        Args:
+            auto_id: 控件 AutomationId
+            control_type: 控件类型，默认 Button
+            timeout: 超时秒数
+
+        用法:
+            app.wait_for_control("1013")       # 等待"上翻页"按钮出现
+            app.wait_for_control("1202", "Edit")  # 等待版本信息文本出现
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                ctrl = self.window.child_window(auto_id=auto_id,
+                                                control_type=control_type,
+                                                found_index=0)
+                if ctrl.exists(timeout=0.5):
+                    logger.info(f"✓ 控件 {auto_id} 已出现")
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        logger.warning(f"控件 {auto_id} 在 {timeout}s 内未出现")
+        return False
+
     def wait_for_image(self, template_name: str, timeout: int = 30) -> bool:
         """等待图片出现（用于确认页面切换完成）"""
         from vision.locate import ImageLocator

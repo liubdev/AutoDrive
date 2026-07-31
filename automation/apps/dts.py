@@ -32,13 +32,11 @@ class DtsApp(BaseApp):
     def confirm(self, timeout: int = 30) -> bool:
         if not self.window and not self._wait_for_dts_window(timeout):
             return False
-        for title in ("确认", "确定"):
-            btn = self.window.child_window(title=title, control_type="Button")
-            if btn.exists(timeout=3):
-                btn.click()
-                logger.info("✓ 点击确认")
-                time.sleep(2)
-                return True
+        btn = self.window.child_window(auto_id="1", control_type="Button")
+        if btn.exists(timeout=3):
+            btn.click()
+            logger.info("确认")
+            return True
         return False
 
     # ── 一键进入 ──
@@ -124,6 +122,27 @@ class DtsApp(BaseApp):
             f.write(text)
         logger.info(f"已保存: {output}")
         return output
+
+    # ── 获取列表第一个项目名称（用于判断当前数据流） ──
+
+    def get_first_list_item(self) -> Optional[str]:
+        """
+        获取当前列表中第一个 ListItem 的名称
+
+        用于判断进入的数据流是否是同一个（内容相同则跳过）。
+        列表项目: auto_id="ListViewItem-0", type=ListItem
+        """
+        try:
+            item = self.window.child_window(
+                auto_id="ListViewItem-0", control_type="ListItem", found_index=0
+            )
+            if item.exists(timeout=2):
+                name = item.window_text()
+                logger.info(f"列表第一项: {name}")
+                return name
+        except Exception as e:
+            logger.warning(f"获取列表第一项失败: {e}")
+        return None
 
     # ── 提取 CSV 路径 ──────────────────────────────
 
