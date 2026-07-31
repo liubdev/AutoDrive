@@ -4,6 +4,7 @@ DTS 自动控制 - 完整数据流保存流程
 
 import sys, logging, warnings, time
 from pathlib import Path
+from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -17,10 +18,24 @@ def step(n, name, ok):
     log.info(f"  {'✓' if ok else '✗'} [{n}] {name}")
 
 
+def make_output_dir():
+    """创建带时间戳的输出目录，返回目录路径"""
+    from datetime import datetime
+    root = Path(__file__).resolve().parent.parent
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = root / "data" / "reports" / f"DTS_{ts}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
 def main():
     log.info("=" * 40)
     log.info("  DTS 自动控制")
     log.info("=" * 40)
+
+    # 创建本次执行的输出目录
+    out_dir = make_output_dir()
+    log.info(f"  输出目录: {out_dir}")
 
     app = DtsApp()
 
@@ -66,11 +81,16 @@ def main():
     ok = app.send_space(timeout=15)
     step(8, "空格确认", ok)
 
-    path = app.save_info_to_txt()
-    if path:
-        log.info(f"  ✓ 已保存: {path}")
+    # 保存版本信息
+    # 保存版本信息
+    version_path = out_dir / "version_info.txt"
+    text = app._read_edit_text()
+    if text:
+        with open(version_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        log.info(f"  ✓ 版本信息已保存: {version_path}")
     else:
-        log.info("  ✗ 保存失败")
+        log.info("  ✗ 版本信息保存失败")
 
     ok = app.send_space(timeout=15)
     step(8, "空格确认", ok)
@@ -80,11 +100,10 @@ def main():
     # ── 获取故障码 ──
     data = app.copy_all_rows(copy_btn_id="1011")
     if data:
-        root = Path(__file__).resolve().parent.parent
-        out = root / "故障码.txt"
-        with open(out, "w", encoding="utf-8") as f:
+        fault_path = out_dir / "fault_codes.txt"
+        with open(fault_path, "w", encoding="utf-8") as f:
             f.write("\n".join(data))
-        log.info(f"  故障码已保存: {out}")
+        log.info(f"  ✓ 故障码已保存: {fault_path}")
 
     # ── 返回导航到数据流 ──
     back_btn = app.window.child_window(
