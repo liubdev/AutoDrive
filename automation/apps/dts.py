@@ -125,23 +125,44 @@ class DtsApp(BaseApp):
 
     # ── 获取列表第一个项目名称（用于判断当前数据流） ──
 
-    def get_first_list_item(self) -> Optional[str]:
+    def get_first_list_item(self, timeout: int = 5) -> Optional[str]:
         """
         获取当前列表中第一个 ListItem 的名称
 
         用于判断进入的数据流是否是同一个（内容相同则跳过）。
-        列表项目: auto_id="ListViewItem-0", type=ListItem
+
+        多策略查找:
+          1. auto_id="ListViewItem-0" (早期版本)
+          2. 任意第一个 ListItem (通用)
+          3. 等待列表加载后重试
         """
-        try:
-            item = self.window.child_window(
-                auto_id="ListViewItem-0", control_type="ListItem", found_index=0
-            )
-            if item.exists(timeout=2):
-                name = item.window_text()
-                logger.info(f"列表第一项: {name}")
-                return name
-        except Exception as e:
-            logger.warning(f"获取列表第一项失败: {e}")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            # 策略1: 按 auto_id 找
+            try:
+                item = self.window.child_window(
+                    auto_id="ListViewItem-0", control_type="ListItem", found_index=0
+                )
+                if item.exists(timeout=0.5):
+                    name = item.window_text()
+                    logger.info(f"列表第一项: {name}")
+                    return name
+            except Exception:
+                pass
+
+            # 策略2: 找任意第一个 ListItem
+            try:
+                items = self.window.descendants(control_type="ListItem")
+                if items:
+                    name = items[0].window_text()
+                    logger.info(f"列表第一项(通用): {name}")
+                    return name
+            except Exception:
+                pass
+
+            time.sleep(0.5)
+
+        logger.warning("获取列表第一项失败: 未找到 ListItem")
         return None
 
     # ── 提取 CSV 路径 ──────────────────────────────

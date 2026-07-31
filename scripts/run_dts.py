@@ -152,6 +152,7 @@ def main():
         log.info("点击 保存列表 按钮")
         save_btn.click_input()
         time.sleep(0.5)
+        # app.send_keys(f"{file_name}{{ENTER}}")
         kb.send_keys(f"{file_name}{{ENTER}}")
 
         # 处理覆盖弹窗
@@ -182,8 +183,8 @@ def main():
         if back_btn.exists(timeout=3):
             log.info("点击 返回 按钮")
             back_btn.click_input()
-        # 重启诊断
-        app.wait_for_control("1046")
+        # 自定义文件名
+        kb.send_keys(f"{file_name}")
 
     # 导航到数据流菜单
     app.send_keys("{DOWN 2}{ENTER}")
@@ -210,14 +211,8 @@ def main():
         # 执行当前数据流操作
         process_flow(flow_count)
         log.info(f"  数据流{flow_count} 完成")
-
-        # 切换到下一个数据流: DOWN + ENTER
-        log.info(f"  切换到下一个数据流...")
-        app.send_keys("{DOWN}")
-        time.sleep(0.2)
-        app.send_keys("{ENTER}")
-        time.sleep(0.2)
-
+        app.wait_for_control("1")
+        # 弹窗确定
         exit_btn = app.window.child_window(
             auto_id="1", control_type="Button", found_index=0
         )
@@ -225,9 +220,33 @@ def main():
             exit_btn.click_input()
 
         # ── 读取保存路径 ──
-        time.sleep(0.5)
+        app.wait_for_control("1058")
         csv = app.extract_csv_path()
+        exit_btn = app.window.child_window(
+            auto_id="1058", control_type="Button", found_index=0
+        )
+        if exit_btn.exists(timeout=3):
+            log.info("点击 csv 路径界面 确认 按钮")
+            exit_btn.click_input()
+
         log.info(f"  CSV: {csv}" if csv else "  CSV: 未找到")
+
+        # 返回到读取所有数据流
+        back = app.window.child_window(
+            auto_id="2", control_type="Button", found_index=0
+        )
+        log.info("返回到读取所有数据流")
+        back.click_input()
+        # 返回主页
+        app.wait_for_control("1129")
+
+        # 切换到下一个数据流: DOWN + ENTER
+        log.info(f" 切换到下一个数据流...")
+        app.send_keys("{DOWN}")
+        time.sleep(0.2)
+        app.send_keys("{ENTER}")
+        # 确定
+        app.wait_for_control("1028")
 
     log.info(f"共处理 {flow_count} 个数据流")
     app.disconnect()
