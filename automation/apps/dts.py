@@ -147,6 +147,40 @@ class DtsApp(BaseApp):
 
     # ── 逐行复制（不确定行数，复制到内容重复为止） ─────
 
+    def _focus_list(self):
+        """
+        聚焦列表窗格(auto_id=1131)，让 DOWN/UP 能切换选中行
+
+        列表窗格信息:
+          auto_id="1131", class=AfxWnd80su, {l:20 t:108 r:1903 b:937}
+        """
+        try:
+            pane = self.window.child_window(
+                auto_id="1131", control_type="Pane", found_index=0
+            )
+            if pane.exists(timeout=2):
+                pane.set_focus()  # 直接给窗格设焦点
+                time.sleep(0.3)
+                logger.info("已聚焦列表窗格")
+                return True
+        except Exception as e:
+            logger.warning(f"聚焦列表失败: {e}")
+
+        # 降级: 点击窗格第一行位置
+        try:
+            pane = self.window.child_window(
+                auto_id="1131", control_type="Pane", found_index=0
+            )
+            if pane.exists(timeout=1):
+                r = pane.rectangle()
+                mouse.click(coords=(r.left + 50, r.top + 30))
+                time.sleep(0.5)
+                logger.info("已点击列表聚焦(降级)")
+                return True
+        except Exception as e:
+            logger.warning(f"点击列表失败: {e}")
+        return False
+
     def copy_all_rows(self, copy_btn_id: str, max_rows: int = 20) -> list:
         """
         逐行选中 → 点击复制 → 对比剪贴板，内容重复则停止
@@ -159,6 +193,7 @@ class DtsApp(BaseApp):
             所有复制到的内容列表
         """
         import tkinter as tk
+        from pywinauto.keyboard import send_keys
 
         root = tk.Tk()
         root.withdraw()
@@ -166,14 +201,18 @@ class DtsApp(BaseApp):
         results = []
         last_text = None
 
+        self._focus_list()
+        for _ in range(3):
+            send_keys("{UP}")
+            time.sleep(1)
+
         for i in range(max_rows):
-            # 下移到下一行
             if i > 0:
-                from pywinauto.keyboard import send_keys
-
+                logger.info("选择下一个选项")
+                # 先点列表聚焦，再 DOWN
+                self._focus_list()
                 send_keys("{DOWN}")
-                time.sleep(0.2)
-
+                time.sleep(2)
             # 点击复制按钮
             btn = self.window.child_window(
                 auto_id=copy_btn_id, control_type="Button", found_index=0
@@ -181,29 +220,32 @@ class DtsApp(BaseApp):
             if not btn.exists(timeout=2):
                 logger.warning(f"复制按钮 (auto_id={copy_btn_id}) 不存在")
                 break
+            logger.info("点击 复制按钮")
             btn.click_input()
-            time.sleep(0.3)
+            time.sleep(1)
 
-            # 复制成功提示 → 回车关闭
-            from pywinauto.keyboard import send_keys as _keys
-
-            _keys("{ENTER}")
-            time.sleep(0.2)
+            # 复制成功提示
+            ok = self.window.child_window(
+                auto_id="2", control_type="Button", found_index=0
+            )
+            logger.info("点击 确认")
+            ok.click_input()
+            time.sleep(0.5)
 
             # 读剪贴板
             try:
-                root.clipboard_clear()
-                time.sleep(0.1)
                 text = root.clipboard_get()
             except Exception:
                 text = ""
 
             text = text.strip()
-            if not text:
-                logger.info(f"  第{i+1}行: 空，停止")
-                break
+            logger.info("粘贴板内容：")
+            logger.info(text)
 
-            # 对比上一次
+            # if not text:
+            #     logger.info(f"  第{i+1}行: 空，停止")
+            #     break
+            # 内容与上次重复 → 已到末尾，结束
             if last_text is not None and text == last_text:
                 logger.info(f"  第{i+1}行: 内容重复，复制完成")
                 break
@@ -211,6 +253,7 @@ class DtsApp(BaseApp):
             results.append(text)
             last_text = text
             logger.info(f"  第{i+1}行: {text[:60]}...")
+            time.sleep(0.5)
 
         root.destroy()
         logger.info(f"  共复制 {len(results)} 行")
