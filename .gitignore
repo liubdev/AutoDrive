@@ -25,3 +25,4 @@ data/config.json
 # --- OS ---
 Thumbs.db
 .DS_Store
+docs
