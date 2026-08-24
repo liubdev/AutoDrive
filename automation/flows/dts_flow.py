@@ -50,38 +50,45 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     # ── 第2步: 确认 ──
     steps.append(FlowStep("确认",
                           action=lambda: app.confirm(timeout=15),
-                          verify={"auto_id": "1197"}, timeout=20))
+                          verify={"auto_id": "1197"}, timeout=20,
+                          continue_on_missing=True))
 
     # ── 第3步: 一键进入 ──
     steps.append(FlowStep("一键进入",
                           action=lambda: app.one_click_enter(),
-                          verify={"auto_id": "6"}, timeout=20))
+                          verify={"auto_id": "6"}, timeout=20,
+                          continue_on_missing=True))
 
     # ── 第4步: 点击进入系统 ──
     steps.append(FlowStep("点击进入系统",
                           action=lambda: app.enter_system(),
-                          verify={"auto_id": "1046"}, timeout=20))
+                          verify={"auto_id": "1046"}, timeout=20,
+                          continue_on_missing=True))
 
     # ── 第5步: 发动机系统诊断 ──
     steps.append(FlowStep("发动机系统诊断",
                           action=lambda: app.send_enter(),
-                          verify={"auto_id": "1058"}, timeout=20))
+                          verify={"auto_id": "1058"}, timeout=20,
+                          continue_on_missing=True))
 
     # ── 第6步: 直接进入 ──
     steps.append(FlowStep("直接进入",
                           action=lambda: app.send_space(),
-                          verify={"auto_id": "1046"}, timeout=20))
+                          verify={"auto_id": "1046"}, timeout=20,
+                          continue_on_missing=True))
 
     # ── 第7步: 发动机2.0T ──
     steps.append(FlowStep("发动机2.0T",
                           action=lambda: app.send_enter(),
-                          verify={"auto_id": "1058"}, timeout=20))
+                          verify={"auto_id": "1058"}, timeout=20,
+                          continue_on_missing=True))
 
     # ── 第8步: 空格 + 版本信息 ──
     steps.append(FlowStep("空格确认",
                           action=lambda: app.send_space(timeout=15),
                           verify={"auto_id": "1202", "control_type": "Edit"},
-                          timeout=20))
+                          timeout=20,
+                          continue_on_missing=True))
 
     # ── 第9步: 保存版本信息 ──
     steps.append(FlowStep("保存版本信息",

@@ -14,6 +14,9 @@ AutoDrive 主窗口：极简主页 + 向导面板（两级导航）
 自动以 QueuedConnection 投递回主线程，UI 只响应信号。
 
 日志策略：对用户隐藏，写入 data/logs/ 文件（autogui.py 配置），界面不展示。
+注意：引擎的 logging 记录已通过 logger 继承（autodrive → FileHandler）直接落盘，
+无需经 Qt 桥转发。若经桥回主线程重记，会再次触发 root 上的 _EngineLogHandler
+（直接连接 → 同步递归 → RecursionError）。改日志请直接调 logging，勿走 bridge。
 """
 
 import logging
@@ -40,6 +43,15 @@ from ui.theme import ThemeManager
 
 log = logging.getLogger("autodrive.ui.wizard")
 
+
+def _safe_log(level: int, fmt: str, *args):
+    """日志写入失败绝不影响主流程（文件日志是辅助，不是功能）。"""
+    try:
+        log.log(level, fmt, *args)
+    except Exception:
+        pass
+
+
 # ── 设备定义（可扩展） ─────────────────────────────
 
 DEVICES = [
@@ -53,9 +65,6 @@ DEVICES = [
     },
 ]
 
-_LOG_LEVELS = {"info": logging.INFO, "warning": logging.WARNING, "error": logging.ERROR}
-
-
 class EngineBridge(QObject):
     """把工作线程里的引擎事件桥接到主线程（Qt 信号自动排队）"""
     flow_start = Signal(object)
@@ -64,7 +73,6 @@ class EngineBridge(QObject):
     step_error = Signal(object)
     flow_done = Signal(object)
     flow_cancelled = Signal(object)
-    log = Signal(str, str)
     run_finished = Signal()
 
 
@@ -232,7 +240,6 @@ class MainWindow(QMainWindow):
         b.step_error.connect(self._on_step_error)
         b.flow_done.connect(self._on_flow_done)
         b.flow_cancelled.connect(self._on_flow_cancelled)
-        b.log.connect(self._bridge_log)
         b.run_finished.connect(self._on_run_finished)
 
     # ── 向导导航 ─────────────────────────────────
@@ -270,7 +277,7 @@ class MainWindow(QMainWindow):
         app = dev["class"]()
         self._app = app
         self._out_dir = make_output_dir()
-        log.info("输出目录: %s", self._out_dir)
+        _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
 
         self._engine = FlowEngine()
         self._engine.steps = dev["build_flow"](app, self._out_dir)
@@ -294,13 +301,12 @@ class MainWindow(QMainWindow):
         eng.on("step_error", b.step_error.emit)
         eng.on("flow_done", b.flow_done.emit)
         eng.on("flow_cancelled", b.flow_cancelled.emit)
-        eng.on("log", b.log.emit)
 
     def _run_engine(self):
         try:
             self._engine.run(verify_app=self._app)
         except Exception as e:
-            self._bridge.log.emit(f"✗ 执行异常: {e}", "error")
+            _safe_log(logging.ERROR, "执行异常: %s", e)
         finally:
             try:
                 self._app.disconnect()
@@ -313,11 +319,6 @@ class MainWindow(QMainWindow):
             self._engine.cancel()
             self._cancelled = True
             self.pages.run.set_status("正在取消…")
-
-    def _bridge_log(self, msg: str, level: str = "info"):
-        """引擎日志 → 文件日志（对用户界面隐藏）"""
-        lv = _LOG_LEVELS.get(level, logging.INFO)
-        log.log(lv, "%s", msg)
 
     # ── 引擎事件（主线程） ────────────────────────
 

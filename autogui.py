@@ -22,7 +22,6 @@ if str(_HERE) not in sys.path:
 from PySide6.QtWidgets import QApplication
 
 from config.settings import settings
-from ui.wizard import MainWindow
 
 
 def _setup_logging():
@@ -42,6 +41,13 @@ def main():
     _setup_logging()
 
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+
+    # 延迟导入：必须在 QApplication 之后 import ui.wizard（会拉入 pywinauto/comtypes 链）。
+    # 先建 QApplication 让 Qt 拥有主线程 COM(STA)，否则该链会抢先以 MTA 初始化 COM，
+    # 导致 Qt OleInitialize() 失败 (0x80010106)。
+    from ui.wizard import MainWindow
+
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

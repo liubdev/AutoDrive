@@ -43,6 +43,7 @@ class FlowStep:
         verify: Optional[dict] = None,
         retry: int = 1,
         timeout: int = 30,
+        continue_on_missing: bool = False,
     ):
         """
         Args:
@@ -51,12 +52,15 @@ class FlowStep:
             verify: 验证条件 {"auto_id": ..., "control_type": ..., "timeout": ...}
             retry: 尝试次数（含首次），失败后自动重试
             timeout: 本步骤验证控件的超时秒数
+            continue_on_missing: True=验证控件未出现时跳过该验证、继续下一步
+                                 （软件版本间控件 ID 可能不同）；False=未出现则失败
         """
         self.name = name
         self.action = action
         self.verify = verify
         self.retry = retry
         self.timeout = timeout
+        self.continue_on_missing = continue_on_missing
 
         # 运行时状态
         self.status = PENDING
@@ -188,6 +192,16 @@ class FlowEngine:
                         timeout=v.get("timeout", step.timeout),
                     )
                     if not ok:
+                        if step.continue_on_missing:
+                            # 该控件在当前软件版本中不存在 → 跳过验证，继续下一步
+                            self.log(
+                                f"  验证控件 {v['auto_id']} 未出现，跳过该验证，继续下一步",
+                                "warning",
+                            )
+                            step.status = DONE
+                            step.error = None
+                            self._emit("step_done", step)
+                            return True
                         raise RuntimeError(f"验证控件 {v['auto_id']} 未出现")
 
                 step.status = DONE
