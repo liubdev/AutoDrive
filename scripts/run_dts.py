@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message="Revert to STA COM threading mode")
 logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
 
 from automation.apps.dts import DtsApp

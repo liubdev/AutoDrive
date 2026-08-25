@@ -12,8 +12,13 @@ AutoDrive 桌面版（PySide6）
 
 import logging
 import sys
+import warnings
 from datetime import datetime
 from pathlib import Path
+
+# pywinauto 导入时若发现主线程 COM 为 MTA，会自行退回 STA 并打印一条
+# 无害告警（"Revert to STA COM threading mode"）。静默它，保持启动输出干净。
+warnings.filterwarnings("ignore", message="Revert to STA COM threading mode")
 
 _HERE = Path(__file__).parent
 if str(_HERE) not in sys.path:

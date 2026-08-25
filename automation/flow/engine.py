@@ -32,6 +32,10 @@ DONE = "done"
 ERROR = "error"
 CANCELLED = "cancelled"
 
+# 软验证（continue_on_missing）的最长等待：控件确认未出现时不必等满 timeout，
+# 给"慢出现但确实存在"的控件留出机会，同时截断版本漂移控件的空等。
+_SOFT_VERIFY_PROBE = 8
+
 
 class FlowStep:
     """一个可执行步骤"""
@@ -186,10 +190,14 @@ class FlowEngine:
                 # 2. 验证控件出现
                 if step.verify and verify_app is not None:
                     v = step.verify
+                    timeout = v.get("timeout", step.timeout)
+                    if step.continue_on_missing:
+                        # 软验证：只探测有限时间，未出现即跳过
+                        timeout = min(timeout, _SOFT_VERIFY_PROBE)
                     ok = verify_app.wait_for_control(
                         v["auto_id"],
                         v.get("control_type", "Button"),
-                        timeout=v.get("timeout", step.timeout),
+                        timeout=timeout,
                     )
                     if not ok:
                         if step.continue_on_missing:
