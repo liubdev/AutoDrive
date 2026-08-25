@@ -76,6 +76,14 @@ class EngineBridge(QObject):
     run_finished = Signal()
 
 
+class AiBridge(QObject):
+    """AI 诊断链事件桥（工作线程 → 主线程）"""
+    stage_started = Signal(int, str)         # (stage_no, name)
+    stage_done = Signal(int, str, object)    # (stage_no, name, result_obj)
+    ai_failed = Signal(str)                  # 用户可读错误
+    ai_finished = Signal(object)             # {"plan","locatability","report","out_dir"}
+
+
 class StepButton(QFrame):
     """向导步骤：圆点数字 + 标签 + 副标题，状态 done/current/next"""
     clicked = Signal(str)
@@ -142,12 +150,14 @@ class MainWindow(QMainWindow):
         # 运行状态
         self._running = False
         self._cancelled = False
+        self._ai_running = False
         self._engine = None
         self._app = None
         self._out_dir = None
         self._report_loader = ReportLoader()
 
         self._bridge = EngineBridge(self)
+        self._ai_bridge = AiBridge(self)
         self._build_ui()
         self._wire_bridge()
         self._goto(0)
@@ -205,7 +215,7 @@ class MainWindow(QMainWindow):
         self._step_btns = []
         specs = [("1", "运行", "运行 DTS 流程", "run"),
                  ("2", "数据", "故障码 / 数据流 / 文件", "data"),
-                 ("3", "AI 分析", "摘要 / 原因 / 方案", "ai")]
+                 ("3", "AI 分析", "采集计划 / 路试 / 报告", "ai")]
         for i, (num, label, sub, key) in enumerate(specs):
             if i:
                 conn = QFrame()
@@ -226,6 +236,7 @@ class MainWindow(QMainWindow):
         self.pages.ai = AiPage()
         self.pages.run.cancel_requested.connect(self._cancel_run)
         self.pages.run.back_requested.connect(self._go_home)
+        self.pages.ai.start_requested.connect(self._start_ai_diagnosis)
         for p in (self.pages.run, self.pages.data, self.pages.ai):
             self._stack.addWidget(p)
         pv.addWidget(self._stack, 1)
@@ -241,6 +252,12 @@ class MainWindow(QMainWindow):
         b.flow_done.connect(self._on_flow_done)
         b.flow_cancelled.connect(self._on_flow_cancelled)
         b.run_finished.connect(self._on_run_finished)
+
+        ab = self._ai_bridge
+        ab.stage_started.connect(self._on_ai_stage_started)
+        ab.stage_done.connect(self._on_ai_stage_done)
+        ab.ai_failed.connect(self._on_ai_failed)
+        ab.ai_finished.connect(self._on_ai_finished)
 
     # ── 向导导航 ─────────────────────────────────
 
@@ -365,6 +382,93 @@ class MainWindow(QMainWindow):
             self._step_btns[2].setClickable(True)
             if advance:
                 self._goto(1)
+
+
+    # ── AI 诊断（三阶段链路） ──────────────────────
+
+    def _start_ai_diagnosis(self):
+        if self._running or self._ai_running:
+            return
+        if not self._out_dir:
+            self.pages.ai.show_error("尚未生成报告，请先运行一次 DTS 流程")
+            return
+        symptom, notes = self.pages.ai.get_input()
+        if not symptom:
+            self.pages.ai.show_error("请先填写故障现象")
+            return
+
+        from ai.deepseek import DeepSeekClient
+        client = DeepSeekClient()
+        if not client.configured:
+            self.pages.ai.show_error(
+                "未配置 DeepSeek API Key（环境变量 DEEPSEEK_API_KEY 或 data/config.json 的 api_key）")
+            return
+
+        self._ai_running = True
+        report = self._report_loader.load(self._out_dir)
+        self.pages.ai.set_report(report)
+        self.pages.ai.reset()
+        self.pages.ai.set_running(True)
+        self.pages.ai.set_status("正在确认采集列表…")
+        self._dev_status.setText("● AI 分析中")
+
+        threading.Thread(
+            target=self._run_ai_chain,
+            args=(report, symptom, notes, client),
+            daemon=True,
+        ).start()
+
+    def _run_ai_chain(self, report, symptom, notes, client):
+        from ai import AiDiagnosticChain
+        from ai.deepseek import AiError
+
+        chain = AiDiagnosticChain(client=client)
+
+        def stage_start(no, name):
+            self._ai_bridge.stage_started.emit(no, name)
+
+        def stage_done(no, name, obj):
+            self._ai_bridge.stage_done.emit(no, name, obj)
+
+        try:
+            result = chain.run_full(
+                report, symptom, notes,
+                callbacks={"stage_start": stage_start, "stage_done": stage_done})
+            self._ai_bridge.ai_finished.emit(result)
+        except AiError as e:
+            _safe_log(logging.ERROR, "AI 诊断失败: %s", e)
+            self._ai_bridge.ai_failed.emit(str(e))
+        except Exception as e:  # noqa: BLE001
+            _safe_log(logging.ERROR, "AI 诊断异常: %s", e)
+            self._ai_bridge.ai_failed.emit(f"AI 诊断异常：{e}")
+
+    def _on_ai_stage_started(self, no, name):
+        self.pages.ai.set_stage(no, "running", "分析中…")
+
+    def _on_ai_stage_done(self, no, name, obj):
+        if no == 1:
+            self.pages.ai.set_stage(1, "done", "完成")
+            self.pages.ai.show_plan(obj.asdict())
+            self.pages.ai.set_status("采集计划已生成，正在判断是否需要路试…")
+        elif no == 2:
+            self.pages.ai.set_stage(2, "done", "完成")
+            self.pages.ai.show_locatability(obj.asdict())
+            self.pages.ai.set_status("路试判断完成，正在输出维修报告…")
+        elif no == 3:
+            self.pages.ai.set_stage(3, "done", "完成")
+            self.pages.ai.show_report(obj)
+
+    def _on_ai_finished(self, result):
+        self._ai_running = False
+        self.pages.ai.set_running(False)
+        self.pages.ai.set_status("诊断完成 — 可查看采集计划 / 路试判断 / 维修报告")
+        self._dev_status.setText("○ 就绪")
+
+    def _on_ai_failed(self, msg):
+        self._ai_running = False
+        self.pages.ai.set_running(False)
+        self.pages.ai.show_error(msg)
+        self._dev_status.setText("○ 就绪")
 
 
 class _Pages:

@@ -201,6 +201,16 @@ QLabel#Tier[grade="later"] { background: {acc_soft}; color: {acc}; }
 QLabel#Tier[grade="deep"] { background: {warn_soft}; color: {warn}; }
 QFrame#Notice { background: {warn_soft}; border: 1px solid {warn_line}; border-radius: {radius}; }
 
+/* AI 页：诊断链路 */
+QLabel#AiStageSub { color: {dim}; font-size: 11px; }
+QLabel#AiVerdict { border-radius: 9px; padding: 2px 9px; font-size: 10px; font-weight: 700; }
+QLabel#AiVerdict[verdict="locatable"] { background: {ok_soft}; color: {ok}; }
+QLabel#AiVerdict[verdict="roadtest"] { background: {warn_soft}; color: {warn}; }
+QLabel#AiVerdict[verdict="failed"] { background: {crit_soft}; color: {crit}; }
+QPlainTextEdit#AiInput { background: {cardbg}; border: 1px solid {cardline}; border-radius: 8px; color: {tx}; font-size: 13px; padding: 8px 10px; selection-background-color: {acc_soft}; }
+QPlainTextEdit#AiInput:focus { border: 1px solid {acc_line}; }
+QTextBrowser#AiReport { background: {cardbg}; border: 1px solid {cardline}; border-radius: {radius}; color: {tx}; font-size: 13px; selection-background-color: {acc_soft}; padding: 4px; }
+
 /* 数据流表 */
 QTableWidget#FlowTable { background: {cardbg}; border: 1px solid {cardline}; border-radius: {radius}; gridline-color: {line}; font-size: 12px; }
 QTableWidget#FlowTable::item { padding: 6px 10px; border: none; border-bottom: 1px solid {line}; }

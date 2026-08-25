@@ -7,6 +7,7 @@ DTS 数据流保存流程 — 配置化定义
 GUI (autogui.py) 与控制台 (scripts/run_dts.py) 共用同一份流程定义。
 """
 
+import shutil
 import time
 import logging
 from pathlib import Path
@@ -220,6 +221,15 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
         # ── 读取保存路径 ──
         app.wait_for_control("1058")
         csv = app.extract_csv_path()
+        # 把 DTS 导出的 CSV 拷进 out_dir（AI 阶段2/3 的数据源）
+        if csv and Path(csv).exists():
+            try:
+                shutil.copy2(csv, out_dir / f"DataFlow_{flow_count}.csv")
+                log.info(f"  ✓ 数据流CSV已保存: DataFlow_{flow_count}.csv")
+            except Exception as e:
+                log.warning(f"  数据流CSV复制失败: {e}")
+        else:
+            log.warning(f"  CSV 文件不存在: {csv}")
         exit_btn = app.window.child_window(
             auto_id="1058", control_type="Button", found_index=0
         )

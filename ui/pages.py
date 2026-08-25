@@ -3,19 +3,22 @@
   HomePage  ⌂主页：品牌 logo + 开始诊断（极简入口，面向用户）
   RunPage   ①运行：设备状态 + 取消 + 步骤时间线 + 进度（无日志/无开始按钮）
   DataPage  ②数据：故障码卡片 + 数据流表 + 已保存文件
-  AiPage    ③AI 分析：摘要/原因/方案/注意事项（AI 模块接入前为诚实占位）
+  AiPage    ③AI 分析：三段式诊断（采集计划 → 路试判断 → 维修报告）
 
 日志对用户隐藏：操作日志写入 data/logs/ 文件，不在界面展示。
 """
 
+import html as _html
+import json
 import re
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QProgressBar,
-    QPushButton, QScrollArea, QSizePolicy, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit,
+    QProgressBar, QPushButton, QScrollArea, QSizePolicy, QTableWidget,
+    QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from ui.logo import LogoWidget
@@ -278,6 +281,7 @@ class RunPage(QWidget):
                 done += 1
             row = QFrame()
             row.setObjectName("StepRow")
+            _prop(row, "st", st)
             h = QHBoxLayout(row)
             h.setContentsMargins(8, 4, 8, 4)
             h.setSpacing(10)
@@ -486,94 +490,425 @@ class DataPage(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════
-#  AiPage  ③AI 分析（AI 模块接入前为诚实占位）
+#  AiPage  ③AI 分析：三段式诊断（采集计划 → 路试判断 → 维修报告）
 # ═══════════════════════════════════════════════════════════
 
+_STAGES = {
+    1: ("确认采集列表", "AI 选择数据流与采集工况"),
+    2: ("是否需要路试", "判断原地数据能否定位"),
+    3: ("输出维修报告", "生成排查方案"),
+}
+
+
+def _rich(text) -> str:
+    """转义模型文本，仅放行 <b>/<strong>/<br> 标签（QTextBrowser 可渲染）"""
+    esc = _html.escape(str(text))
+    for tag in ("br", "br/", "br /"):
+        esc = esc.replace(f"&lt;{tag}&gt;", "<br>")
+    esc = esc.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+    esc = esc.replace("&lt;strong&gt;", "<b>").replace("&lt;/strong&gt;", "</b>")
+    esc = esc.replace("\r\n", "\n").replace("\n", "<br>")
+    return esc
+
+
 class AiPage(QWidget):
+    """③AI 分析：故障现象输入 → 三段式诊断链路 → 结果卡片"""
+
+    start_requested = Signal()   # 用户点「开始 AI 诊断」→ wizard 起后台线程
+    stop_requested = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("AiPage")
         self.setAttribute(Qt.WA_StyledBackground, True)
         self._report = None
+        self._out_dir = None
+        self._running = False
+        self._stage_rows = {}     # no -> (row, icon, name, note)
         self._build_ui()
+
+    # ── 构建 UI ──────────────────────────────────────
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 18, 24, 18)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        self._stack = QWidget()
+        self._stack_layout = QVBoxLayout(self._stack)
+        self._stack_layout.setContentsMargins(24, 18, 24, 18)
+        self._stack_layout.setSpacing(10)
+        self._stack_layout.addStretch(1)
 
-        # 头部：标题 + PRO 徽标 + 说明
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(self._stack)
+        root.addWidget(scroll)
+
+        # ── 头部 ──
+        self._stack_layout.insertLayout(0, self._header_row())
+        self._stack_layout.insertWidget(1, self._input_card())
+        self._stack_layout.insertLayout(2, _section_header("诊断链路"))
+        self._stack_layout.insertWidget(3, self._stage_timeline())
+        self._stack_layout.insertWidget(4, self._plan_card())
+        self._stack_layout.insertWidget(5, self._loc_card())
+        self._stack_layout.insertWidget(6, self._report_card())
+
+        # ── 页脚说明 ──
+        self._stack_layout.insertLayout(7, self._footer_row())
+
+    def _header_row(self) -> QHBoxLayout:
         head = QHBoxLayout()
-        title = QLabel("AI 分析")
-        title.setObjectName("CardTitle")
+        title = QLabel("AI 诊断")
+        title.setObjectName("SecTitle")
+        title.setStyleSheet("font-size: 15px;")
         head.addWidget(title)
-        badge = QLabel("PRO")
-        badge.setObjectName("Tier")
-        _prop(badge, "grade", "later")
-        head.addWidget(badge)
+
+        # 模型 chip
+        try:
+            from config.settings import settings
+            model = getattr(settings, "ai_model", "deepseek-chat")
+        except Exception:
+            model = "deepseek-chat"
+        chip = QLabel(f"DeepSeek · {model}")
+        chip.setObjectName("Chip")
+        head.addWidget(chip)
         head.addStretch(1)
         self._sum_lbl = QLabel("等待运行数据")
         self._sum_lbl.setObjectName("SecCount")
         head.addWidget(self._sum_lbl)
-        root.addLayout(head)
+        return head
 
-        # 模块状态提示
-        notice = QFrame()
-        notice.setObjectName("Notice")
-        nv = QVBoxLayout(notice)
-        nv.setContentsMargins(14, 12, 14, 12)
-        nv.setSpacing(6)
-        t = QLabel("AI 分析模块尚未接入（规划中）")
-        t.setObjectName("AiHeader")
-        nv.addWidget(t)
-        d = QLabel("接入后将读取本次采集的故障码与数据流，自动生成故障摘要、"
-                   "可能原因推断与分优先级的维修建议。分析仅供辅助判断，不构成维修结论。")
-        d.setObjectName("AiText")
-        d.setWordWrap(True)
-        nv.addWidget(d)
-        btn = QPushButton("生成分析 · 开发中")
-        btn.setObjectName("Ghost")
-        btn.setEnabled(False)
-        nv.addWidget(btn)
-        root.addWidget(notice)
-
-        # 四块布局（摘要 / 原因 / 方案 / 注意事项），占位状态
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(14)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
-        grid.addWidget(self._block("故障摘要",
-            "运行完成后将在此显示故障码汇总与异常数据流概览。"), 0, 0)
-        grid.addWidget(self._block("建议修改方案 · 按优先级",
-            "按优先级列出维修/排查建议，并标注处理时机（立即 / 下次保养 / 需深入诊断）。"), 0, 1)
-        grid.addWidget(self._block("可能原因",
-            "结合故障码与数据流推断的可能原因列表。"), 1, 0)
-        grid.addWidget(self._block("注意事项",
-            "AI 推断的边界说明与实车确认提醒。"), 1, 1)
-        root.addLayout(grid)
-        root.addStretch(1)
-
-    def _block(self, header, text) -> QFrame:
+    def _input_card(self) -> QFrame:
         card = QFrame()
         card.setObjectName("AiCard")
         v = QVBoxLayout(card)
         v.setContentsMargins(16, 14, 16, 14)
-        v.setSpacing(8)
-        t = QLabel(header)
+        v.setSpacing(6)
+
+        lbl = QLabel("故障现象")
+        lbl.setObjectName("AiHeader")
+        v.addWidget(lbl)
+        self._symptom_input = QPlainTextEdit()
+        self._symptom_input.setObjectName("AiInput")
+        self._symptom_input.setPlaceholderText(
+            "例：动力不足、发动机抖动、故障灯亮…\n描述车辆当前的问题，越具体越好。")
+        self._symptom_input.setFixedHeight(64)
+        v.addWidget(self._symptom_input)
+
+        lbl2 = QLabel("补充说明（可选）")
+        lbl2.setObjectName("AiHeader")
+        v.addWidget(lbl2)
+        self._notes_input = QPlainTextEdit()
+        self._notes_input.setObjectName("AiInput")
+        self._notes_input.setPlaceholderText(
+            "例：已做过的维修、车辆配置、未安装的部件、特殊工况等。")
+        self._notes_input.setFixedHeight(40)
+        v.addWidget(self._notes_input)
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        self._run_btn = QPushButton("开始 AI 诊断")
+        self._run_btn.setObjectName("Primary")
+        self._run_btn.setCursor(Qt.PointingHandCursor)
+        self._run_btn.setEnabled(False)
+        self._run_btn.clicked.connect(self.start_requested)
+        row.addWidget(self._run_btn)
+        self._status_lbl = QLabel("先运行一次 DTS 流程，即可开始 AI 诊断")
+        self._status_lbl.setObjectName("DtcDesc")
+        row.addWidget(self._status_lbl)
+        row.addStretch(1)
+        v.addLayout(row)
+        return card
+
+    def _stage_timeline(self) -> QFrame:
+        wrap = QFrame()
+        wrap.setObjectName("AiCard")
+        wv = QVBoxLayout(wrap)
+        wv.setContentsMargins(10, 10, 10, 10)
+        wv.setSpacing(2)
+        for no, (name, sub) in _STAGES.items():
+            row, icon, name_lbl, note = self._make_stage_row(no, name, sub)
+            self._stage_rows[no] = (row, icon, name_lbl, note)
+            wv.addWidget(row)
+        return wrap
+
+    def _make_stage_row(self, no, name, sub):
+        row = QFrame()
+        row.setObjectName("StepRow")
+        h = QHBoxLayout(row)
+        h.setContentsMargins(8, 5, 8, 5)
+        h.setSpacing(10)
+        icon = QLabel(ICONS.get("pending", "◌"))
+        icon.setObjectName("StepIcon")
+        icon.setFixedSize(18, 18)
+        icon.setAlignment(Qt.AlignCenter)
+        _prop(icon, "st", "pending")
+        h.addWidget(icon)
+        txt = QVBoxLayout()
+        txt.setSpacing(0)
+        name_lbl = QLabel(f"{no}.  {name}")
+        name_lbl.setObjectName("StepName")
+        _prop(name_lbl, "st", "pending")
+        txt.addWidget(name_lbl)
+        sub_lbl = QLabel(sub)
+        sub_lbl.setObjectName("AiStageSub")
+        txt.addWidget(sub_lbl)
+        h.addLayout(txt)
+        h.addStretch(1)
+        note = QLabel("")
+        note.setObjectName("StepNote")
+        _prop(note, "st", "pending")
+        h.addWidget(note)
+        _prop(row, "st", "pending")
+        return row, icon, name_lbl, note
+
+    def _plan_card(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName("AiCard")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(6)
+        t = QLabel("① 采集计划")
         t.setObjectName("AiHeader")
         v.addWidget(t)
-        d = QLabel(text)
-        d.setObjectName("AiText")
-        d.setWordWrap(True)
-        v.addWidget(d)
-        v.addStretch(1)
+        self._plan_chips = QHBoxLayout()
+        self._plan_chips.setSpacing(6)
+        self._plan_chips.addStretch(1)
+        v.addLayout(self._plan_chips)
+        self._plan_cond = QLabel("")
+        self._plan_cond.setObjectName("DtcDesc")
+        self._plan_cond.setWordWrap(True)
+        v.addWidget(self._plan_cond)
+        card.setVisible(False)
         return card
+
+    def _loc_card(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName("AiCard")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(6)
+        t = QLabel("② 路试判断")
+        t.setObjectName("AiHeader")
+        v.addWidget(t)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._loc_verdict = QLabel("")
+        self._loc_verdict.setObjectName("AiVerdict")
+        row.addWidget(self._loc_verdict)
+        self._loc_reason = QLabel("")
+        self._loc_reason.setObjectName("DtcDesc")
+        self._loc_reason.setWordWrap(True)
+        row.addWidget(self._loc_reason, 1)
+        v.addLayout(row)
+        card.setVisible(False)
+        return card
+
+    def _report_card(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName("AiCard")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(6)
+        t = QLabel("③ 维修报告")
+        t.setObjectName("AiHeader")
+        v.addWidget(t)
+        self._report_browser = QTextBrowser()
+        self._report_browser.setObjectName("AiReport")
+        self._report_browser.setOpenExternalLinks(False)
+        self._report_browser.setMinimumHeight(220)
+        v.addWidget(self._report_browser)
+        card.setVisible(False)
+        return card
+
+    def _footer_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.addStretch(1)
+        note = QLabel("分析基于本次采集的故障码与数据流 · AI 结果仅供辅助判断，不构成维修结论")
+        note.setObjectName("DtcDesc")
+        row.addWidget(note)
+        return row
+
+    # ── 对外接口 ──────────────────────────────────────
+
+    def get_input(self):
+        """返回 (故障现象, 补充说明)"""
+        return (self._symptom_input.toPlainText().strip(),
+                self._notes_input.toPlainText().strip())
 
     def set_report(self, report: Report | None):
         self._report = report
-        if report and report.has_data:
+        has = report is not None and report.has_data
+        self._run_btn.setEnabled(has and not self._running)
+        if has:
             self._sum_lbl.setText(
                 f"基于 {len(report.faults)} 条故障码 + {len(report.flows)} 项数据流")
+            self._status_lbl.setText("输入故障现象后开始诊断")
+            out_dir = getattr(report, "out_dir", None)
+            if out_dir and not self._running:
+                self.load_from(out_dir)
         else:
             self._sum_lbl.setText("等待运行数据")
+            self._status_lbl.setText("先运行一次 DTS 流程，即可开始 AI 诊断")
+
+    def load_from(self, out_dir):
+        """报告重新加载/切换时，从 out_dir 恢复已保存的 AI 结果（重跑后回看不丢）"""
+        self._out_dir = Path(out_dir)
+        plan_p = self._out_dir / "ai_collection_plan.json"
+        loc_p = self._out_dir / "ai_locatability.json"
+        rep_p = self._out_dir / "ai_report.json"
+        try:
+            if plan_p.exists():
+                self.show_plan(json.loads(plan_p.read_text(encoding="utf-8")))
+                self._set_stage(1, "done", "已完成")
+            if loc_p.exists():
+                self.show_locatability(json.loads(loc_p.read_text(encoding="utf-8")))
+                self._set_stage(2, "done", "已完成")
+            if rep_p.exists():
+                self.show_report(json.loads(rep_p.read_text(encoding="utf-8")))
+                self._set_stage(3, "done", "已完成")
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger("autodrive.ui.pages").warning("AI 结果恢复失败: %s", e)
+
+    def reset(self):
+        """开始新一轮诊断：清空结果、状态归位"""
+        self._running = False
+        self._run_btn.setEnabled(self._report is not None and self._report.has_data)
+        self._run_btn.setText("开始 AI 诊断")
+        self._status_lbl.setText("诊断进行中…")
+        self._plan_card_ref().setVisible(False)
+        self._loc_card_ref().setVisible(False)
+        self._report_card_ref().setVisible(False)
+        for no in _STAGES:
+            self._set_stage(no, "pending", "")
+
+    def set_running(self, running: bool):
+        self._running = running
+        self._run_btn.setEnabled(not running and self._report is not None
+                                 and self._report.has_data)
+        self._run_btn.setText("诊断中…" if running else "开始 AI 诊断")
+
+    def set_status(self, text: str):
+        self._status_lbl.setText(text)
+
+    def _set_stage(self, no: int, state: str, note: str = ""):
+        row, icon, name_lbl, note_lbl = self._stage_rows.get(no, (None,) * 4)
+        if row is None:
+            return
+        icon.setText(ICONS.get(state, "◌"))
+        note_lbl.setText(note if note else "")
+        for w in (row, icon, name_lbl, note_lbl):
+            _prop(w, "st", state)
+
+    def set_stage(self, no: int, state: str, note: str = ""):
+        self._set_stage(no, state, note)
+
+    def show_plan(self, data: dict):
+        """渲染采集计划：推荐数据流 chips + 工况"""
+        card = self._plan_card_ref()
+        card.setVisible(True)
+        # 清空旧的 chips（保留 stretch）
+        while self._plan_chips.count() > 1:
+            item = self._plan_chips.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        streams = data.get("streams") or []
+        if streams:
+            for s in streams[:30]:
+                chip = QLabel(s)
+                chip.setObjectName("Chip")
+                self._plan_chips.insertWidget(self._plan_chips.count() - 1, chip)
+        else:
+            note = QLabel("AI 未返回推荐数据流")
+            note.setObjectName("DtcDesc")
+            self._plan_chips.insertWidget(self._plan_chips.count() - 1, note)
+        cond = (data.get("working_conditions") or "").strip()
+        self._plan_cond.setText(f"采集工况：{cond}" if cond else "采集工况：—")
+
+    def show_locatability(self, data: dict):
+        card = self._loc_card_ref()
+        card.setVisible(True)
+        locatable = bool(data.get("is_locatable"))
+        self._loc_verdict.setText("可原地定位 · 无需路试" if locatable else "需路试 / 复测")
+        _prop(self._loc_verdict, "verdict",
+              "locatable" if locatable else "roadtest")
+        self._loc_reason.setText(str(data.get("reason") or ""))
+
+    def show_report(self, data: dict):
+        card = self._report_card_ref()
+        card.setVisible(True)
+        self._report_browser.setHtml(self._build_report_html(data))
+
+    def show_error(self, msg: str):
+        self._status_lbl.setText(f"诊断失败：{msg}")
+        # 正在运行的阶段标红
+        for no in _STAGES:
+            row, icon, name_lbl, note_lbl = self._stage_rows[no]
+            if icon.text() == ICONS.get("running"):
+                self._set_stage(no, "error", "失败")
+        self._run_btn.setText("重试")
+
+    # ── 私有：卡片引用 + 报告 HTML ─────────────────────
+
+    def _plan_card_ref(self):
+        return self._stack_layout.itemAt(4).widget()
+
+    def _loc_card_ref(self):
+        return self._stack_layout.itemAt(5).widget()
+
+    def _report_card_ref(self):
+        return self._stack_layout.itemAt(6).widget()
+
+    def _build_report_html(self, data: dict) -> str:
+        tm = ThemeManager.instance()
+        toks = tm.tokens if tm is not None else {}
+        acc = toks.get("acc", "#0D9488")
+        tx = toks.get("tx", "#17213A")
+        mut = toks.get("mut", "#5C6B82")
+        warn = toks.get("warn", "#B45309")
+        panel = toks.get("panel", "#F7F9FC")
+
+        parts = ["<html><body style='margin:0;'>"]
+        concl = (data.get("overallConclusion") or "").strip()
+        if concl:
+            parts.append(
+                f"<div style='font-size:14px; font-weight:600; color:{acc};"
+                f" line-height:1.8; margin-bottom:12px;'>{_rich(concl)}</div>")
+        diags = data.get("diagnosisList") or []
+        if not diags:
+            parts.append(f"<div style='color:{mut};'>（AI 未返回具体排查条目）</div>")
+        for i, d in enumerate(diags, 1):
+            fp = (d.get("faultPoint") or "—").strip()
+            prob = (d.get("probability") or "").strip()
+            expl = (d.get("simpleExplanation") or "").strip()
+            steps = d.get("guideSteps") or []
+            parts.append(
+                f"<div style='margin-bottom:12px; padding:10px 12px;"
+                f" background:{panel}; border-radius:8px;'>")
+            parts.append(
+                f"<div style='font-size:13px; font-weight:700; color:{tx};'>"
+                f"核心病灶 {i} · {_rich(fp)}</div>")
+            if prob:
+                parts.append(
+                    f"<div style='font-size:11px; color:{warn};"
+                    f" margin:2px 0 6px 0;'>{_rich(prob)}</div>")
+            if expl:
+                parts.append(
+                    f"<div style='font-size:13px; color:{tx}; line-height:1.8;"
+                    f" margin-bottom:6px;'>诊断逻辑：{_rich(expl)}</div>")
+            if steps:
+                parts.append(
+                    f"<div style='font-size:12px; font-weight:600; color:{mut};"
+                    f" margin-top:6px;'>排查处方</div>")
+                for j, s in enumerate(steps, 1):
+                    s = (s or "").strip()
+                    if not s:
+                        continue
+                    parts.append(
+                        f"<div style='font-size:13px; color:{tx}; line-height:1.9;"
+                        f" margin-top:4px;'><b>{j}.</b> {_rich(s)}</div>")
+            parts.append("</div>")
+        parts.append("</body></html>")
+        return "".join(parts)

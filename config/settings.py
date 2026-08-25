@@ -27,13 +27,14 @@ class Settings:
     screenshot_format: str = "png"
     ocr_lang: str = "zh-CN"            # Windows OCR 语言
 
-    # --- AI ---
-    ai_provider: str = "openai"        # openai / azure / local
-    ai_model: str = "gpt-4o"
-    ai_temperature: float = 0.1
-    ai_max_tokens: int = 2000
-    api_key: Optional[str] = None
-    api_base: Optional[str] = None
+    # --- AI (DeepSeek) ---
+    ai_provider: str = "deepseek"      # deepseek（OpenAI 兼容，key 走环境变量或 config.json）
+    ai_model: str = "deepseek-chat"
+    ai_temperature: float = 0.2
+    ai_max_tokens: int = 4000
+    ai_timeout: int = 120
+    api_key: Optional[str] = None      # None → 回退环境变量 DEEPSEEK_API_KEY
+    api_base: Optional[str] = "https://api.deepseek.com"
 
     # --- Logging ---
     log_level: str = "INFO"

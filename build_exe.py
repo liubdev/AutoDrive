@@ -34,6 +34,7 @@ def main():
         "--add-data", f"automation{os.pathsep}automation",
         "--add-data", f"vision{os.pathsep}vision",
         "--add-data", f"config{os.pathsep}config",
+        "--add-data", f"ai{os.pathsep}ai",   # 模板 + 知识库数据文件
         "--hidden-import", "winsdk",
         "--hidden-import", "winsdk.windows.media.ocr",
         "--hidden-import", "winsdk.windows.globalization",
