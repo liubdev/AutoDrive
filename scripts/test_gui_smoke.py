@@ -12,6 +12,8 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
+from PySide6.QtWidgets import QScrollArea
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -28,10 +30,26 @@ def ok(name, cond, detail=""):
         print(f"  ✗ {name}  {detail}")
 
 
+def _chip_texts(layout):
+    """收集 QHBoxLayout 内 Chip QLabel 文本"""
+    out = []
+    for i in range(layout.count()):
+        w = layout.itemAt(i).widget()
+        if w is not None and getattr(w, "text", None):
+            out.append(w.text())
+    return out
+
+
+def _scroll_count(widget):
+    """统计 widget 子树内的 QScrollArea 数量"""
+    return len(widget.findChildren(QScrollArea))
+
+
 def main():
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLabel
     from ui.report import ReportLoader
     from ui.wizard import MainWindow
+    from ui.pages import PhaseBar
     from ai.chain import CollectionPlan, Locatability
 
     # 夹具 out_dir
@@ -111,6 +129,66 @@ def main():
     # 6. set_report(None) → 按钮禁用
     w.pages.ai.set_report(None)
     ok("无报告按钮禁用", not w.pages.ai._run_btn.isEnabled())
+
+    # 7. 单页连续流：节可见性 / 摘要 chips / 展开收起
+    diag = w.pages.diag
+    ok("单页初始②③节隐藏", diag._data_section.isHidden() and diag.ai.isHidden())
+    diag.set_report(report)
+    ok("set_report 后②③节可见", not diag._data_section.isHidden()
+       and not diag.ai.isHidden())
+    chips = _chip_texts(diag._sum_chips)
+    ok("摘要 chips 含计数", "1 条故障码" in chips and "2 项数据流" in chips, chips)
+
+    diag.data.setVisible(False)          # 保证起点是收起态
+    diag._toggle_btn.click()
+    ok("展开明细后 detail 可见", not diag.data.isHidden())
+    diag._toggle_btn.click()
+    ok("收起明细后 detail 隐藏", diag.data.isHidden())
+    ok("展开按钮文案复位", diag._toggle_btn.text() == "▸ 展开明细")
+
+    # 8. PhaseBar 三态（纯展示，不可点击）
+    pb = PhaseBar()
+    pb.set_phase("data")
+    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
+    ok("PhaseBar data 阶段", st == ["done", "current", "next"], st)
+    pb.set_phase("ai")
+    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
+    ok("PhaseBar ai 阶段", st == ["done", "done", "current"], st)
+
+    # 9. embed 模式：无内滚 / 无空态 / 无页面级返回按钮
+    ok("RunPage embed 无内滚", _scroll_count(diag.run) == 0)
+    ok("DataPage embed 无内滚", _scroll_count(diag.data) == 0)
+    ok("AiPage embed 无内滚", _scroll_count(diag.ai) == 0)
+    ok("DataPage embed 无空态", not hasattr(diag.data, "_empty"))
+    ok("RunPage embed 无底部返回", diag.run._back_btn is None)
+
+    # 10. DataPage 重复 set_report 不叠加渲染
+    n = diag.data._stack_layout.count()
+    diag.data.set_report(report)
+    ok("重复 set_report 不叠加", diag.data._stack_layout.count() == n,
+       f"{n} -> {diag.data._stack_layout.count()}")
+
+    # 11. reset_all 收起②③、复位展开按钮
+    diag.reset_all()
+    ok("reset_all 收起②③", diag._data_section.isHidden() and diag.ai.isHidden()
+       and diag._toggle_btn.text() == "▸ 展开明细")
+
+    # 12. 采集完成 → 自动触发 AI（未配置 key 时软跳过，不打断收尾）
+    import ai.deepseek as _ds
+    w._out_dir = tmp
+    w._on_flow_done(None)               # 有故障码 → pending 置位、PhaseBar→data
+    ok("流程完成 pending 自动 AI", w._pending_auto_ai is True
+       and w._phase_bar._dots[1][0].property("stepState") == "current")
+    _saved_cfg = _ds.DeepSeekClient.configured
+    _ds.DeepSeekClient.configured = property(lambda self: False)
+    try:
+        w._on_run_finished()
+    finally:
+        _ds.DeepSeekClient.configured = _saved_cfg
+    ok("未配置 key 软跳过自动 AI", w._ai_running is False
+       and "跳过" in w.pages.ai._status_lbl.text(), w.pages.ai._status_lbl.text())
+    ok("软跳过后复位就绪", w._pending_auto_ai is False
+       and w._dev_status.text() == "○ 就绪")
 
     print(f"\n══ GUI PASS {PASS} / FAIL {FAIL} ══")
     sys.exit(1 if FAIL else 0)

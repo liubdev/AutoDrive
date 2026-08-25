@@ -12,7 +12,8 @@ pip install pywinauto psutil opencv-python numpy pillow mss winsdk PySide6
 ## 使用
 
 ```bash
-# 桌面版 GUI：极简主页 → 向导（①运行 ②数据 ③AI分析）
+# 桌面版 GUI：极简主页 → 单页连续诊断流（①采集 → ②数据 → ③AI 分析）
+# 采集完成自动结合故障码/数据流/知识库生成 AI 诊断方案，无需手动输入
 python autogui.py
 
 # 控制台版（同一份流程定义）
@@ -35,7 +36,7 @@ AutoDrive/
 │   ├── logo.py          品牌 Logo：仪表盘造型（主页静态展示）
 │   ├── theme.py         主题：固定浅色 × 强调色（信号青），QSS 令牌渲染
 │   ├── report.py        输出目录解析（故障码/数据流/文件）
-│   ├── pages.py         主页(极简) + ①运行 ②数据 ③AI分析 页面
+│   ├── pages.py         主页(极简) + 单页诊断流（采集→数据→AI）+ 进度指示
 │   └── wizard.py        主窗口：主页 → 向导面板（两级导航 + 引擎桥接）
 ├── vision/              视觉识别
 │   ├── ocr.py           Windows 内置 OCR（无需安装）

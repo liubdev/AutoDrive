@@ -1,9 +1,12 @@
 """
 页面：
-  HomePage  ⌂主页：品牌 logo + 开始诊断（极简入口，面向用户）
-  RunPage   ①运行：设备状态 + 取消 + 步骤时间线 + 进度（无日志/无开始按钮）
-  DataPage  ②数据：故障码卡片 + 数据流表 + 已保存文件
-  AiPage    ③AI 分析：三段式诊断（采集计划 → 路试判断 → 维修报告）
+  HomePage        ⌂主页：品牌 logo + 开始诊断（极简入口，面向用户）
+  PhaseBar        流程进度指示（①采集 ②数据 ③AI，纯展示不可点击）
+  DiagnosticPage  单页连续诊断流：①采集运行 → ②采集结果(摘要+可展开) → ③AI 诊断
+    ├ RunPage  ①采集：设备状态 + 取消 + 步骤时间线 + 进度
+    ├ DataPage ②数据：故障码卡片 + 数据流表 + 已保存文件（摘要卡内可展开）
+    └ AiPage   ③AI 分析：三段式诊断（采集计划 → 路试判断 → 维修报告）
+  RunPage/DataPage/AiPage 均支持 embed=True，作为子部件嵌入单页（去内滚/空态/底部）。
 
 日志对用户隐藏：操作日志写入 data/logs/ 文件，不在界面展示。
 """
@@ -13,7 +16,7 @@ import json
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit,
@@ -83,6 +86,63 @@ def _eval_status(value: str, ref: str):
             return "warn", "偏高"
         return "ok", "正常"
     return "", ""
+
+
+# ═══════════════════════════════════════════════════════════
+#  PhaseBar  单页流程的纯进度指示（不可点击）
+# ═══════════════════════════════════════════════════════════
+
+class PhaseBar(QFrame):
+    """①采集 → ②数据 → ③AI 的三段进度条，只做状态提示，不承担导航。"""
+
+    _PHASES = [
+        ("①", "采集", "DTS 流程"),
+        ("②", "数据", "故障码 · 数据流"),
+        ("③", "AI 分析", "计划 · 路试 · 报告"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("PhaseBar")
+        self._dots = []
+        h = QHBoxLayout(self)
+        h.setContentsMargins(16, 8, 16, 8)
+        h.setSpacing(0)
+        h.addStretch(1)
+        for i, (num, label, sub) in enumerate(self._PHASES):
+            if i:
+                conn = QLabel("")
+                conn.setObjectName("Conn")
+                conn.setFixedSize(30, 2)
+                h.addWidget(conn)
+            dot = QLabel(num)
+            dot.setObjectName("StepDot")
+            dot.setFixedSize(22, 22)
+            dot.setAlignment(Qt.AlignCenter)
+            _prop(dot, "stepState", "next")
+            h.addWidget(dot)
+            v = QVBoxLayout()
+            v.setSpacing(0)
+            lbl = QLabel(label)
+            lbl.setObjectName("StepLabel")
+            _prop(lbl, "stepState", "next")
+            v.addWidget(lbl)
+            sub = QLabel(sub)
+            sub.setObjectName("StepSub")
+            v.addWidget(sub)
+            h.addLayout(v)
+            h.addSpacing(8)
+            self._dots.append((dot, lbl, sub))
+        h.addStretch(1)
+        self.set_phase("run")
+
+    def set_phase(self, phase: str):
+        """phase ∈ "run" | "data" | "ai"：当前=current、之前=done、之后=next"""
+        idx = {"run": 0, "data": 1, "ai": 2}.get(phase, 0)
+        for i, (dot, lbl, sub) in enumerate(self._dots):
+            state = "current" if i == idx else ("done" if i < idx else "next")
+            for w in (dot, lbl, sub):
+                _prop(w, "stepState", state)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -158,17 +218,22 @@ class RunPage(QWidget):
     cancel_requested = Signal()
     back_requested = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, embed=False):
         super().__init__(parent)
         self.setObjectName("RunPage")
         self.setAttribute(Qt.WA_StyledBackground, True)
+        self._embed = embed
         self._running = False
         self._steps = []
+        self._back_btn = None
         self._build_ui()
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 18, 24, 18)
+        if self._embed:
+            root.setContentsMargins(0, 0, 0, 0)     # 单页模式：外边距由 DiagnosticPage 统一
+        else:
+            root.setContentsMargins(24, 18, 24, 18)
         root.setSpacing(14)
 
         # ── 设备卡片 ──
@@ -221,32 +286,37 @@ class RunPage(QWidget):
 
         # ── 步骤时间线 ──
         root.addLayout(_section_header("执行进度"))
-        tl_scroll = QScrollArea()
-        tl_scroll.setWidgetResizable(True)
-        tl_scroll.setFrameShape(QFrame.NoFrame)
         tl_widget = QWidget()
         self._timeline = QVBoxLayout(tl_widget)
         self._timeline.setContentsMargins(2, 2, 8, 2)
         self._timeline.setSpacing(2)
-        self._timeline.addStretch(1)
-        tl_scroll.setWidget(tl_widget)
-        root.addWidget(tl_scroll, 1)
+        if not self._embed:
+            self._timeline.addStretch(1)
+        if self._embed:
+            root.addWidget(tl_widget)              # 单页模式：时间线自然展开，无内滚
+        else:
+            tl_scroll = QScrollArea()
+            tl_scroll.setWidgetResizable(True)
+            tl_scroll.setFrameShape(QFrame.NoFrame)
+            tl_scroll.setWidget(tl_widget)
+            root.addWidget(tl_scroll, 1)
 
-        # ── 返回主页（底部） ──
-        foot = QHBoxLayout()
-        foot.addStretch(1)
-        self._back_btn = QPushButton("‹  返回主页")
-        self._back_btn.setObjectName("Ghost")
-        self._back_btn.clicked.connect(self.back_requested)
-        foot.addWidget(self._back_btn)
-        root.addLayout(foot)
+            # ── 返回主页（底部） ──
+            foot = QHBoxLayout()
+            foot.addStretch(1)
+            self._back_btn = QPushButton("‹  返回主页")
+            self._back_btn.setObjectName("Ghost")
+            self._back_btn.clicked.connect(self.back_requested)
+            foot.addWidget(self._back_btn)
+            root.addLayout(foot)
 
     # ── 对外接口 ──
 
     def set_running(self, running: bool):
         self._running = running
         self._cancel_btn.setEnabled(running)
-        self._back_btn.setEnabled(not running)
+        if self._back_btn is not None:
+            self._back_btn.setEnabled(not running)
         if running:
             self._status_pill.setText("执行中")
             _prop(self._status_pill, "grade", "now")
@@ -305,7 +375,8 @@ class RunPage(QWidget):
             if note.text():
                 h.addWidget(note)
             self._timeline.addWidget(row)
-        self._timeline.addStretch(1)
+        if not self._embed:
+            self._timeline.addStretch(1)
         self._progress.setValue(done)
         self._step_count_lbl.setText(f"{done} / {len(steps)}")
 
@@ -315,10 +386,11 @@ class RunPage(QWidget):
 # ═══════════════════════════════════════════════════════════
 
 class DataPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, embed=False):
         super().__init__(parent)
         self.setObjectName("DataPage")
         self.setAttribute(Qt.WA_StyledBackground, True)
+        self._embed = embed
         self._report = None
         self._status_items = []   # [(item, status)] 用于主题切换时重上色
         self._build_ui()
@@ -331,28 +403,36 @@ class DataPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         self._stack = QWidget()
         self._stack_layout = QVBoxLayout(self._stack)
-        self._stack_layout.setContentsMargins(24, 18, 24, 18)
+        if self._embed:
+            self._stack_layout.setContentsMargins(0, 0, 0, 0)
+        else:
+            self._stack_layout.setContentsMargins(24, 18, 24, 18)
         self._stack_layout.setSpacing(10)
-        self._stack_layout.addStretch(1)
+        if not self._embed:
+            self._stack_layout.addStretch(1)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(self._stack)
-        root.addWidget(scroll)
+        if self._embed:
+            root.addWidget(self._stack)            # 单页模式：内容直接嵌入，无内滚/空态
+        else:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setWidget(self._stack)
+            root.addWidget(scroll)
 
-        # 空状态
-        self._empty = QLabel("尚未生成报告 — 先运行一次 DTS 流程")
-        self._empty.setObjectName("DtcDesc")
-        self._empty.setAlignment(Qt.AlignCenter)
-        root.addWidget(self._empty)
+            # 空状态
+            self._empty = QLabel("尚未生成报告 — 先运行一次 DTS 流程")
+            self._empty.setObjectName("DtcDesc")
+            self._empty.setAlignment(Qt.AlignCenter)
+            root.addWidget(self._empty)
 
         self.set_report(None)
 
     def set_report(self, report: Report | None):
         self._report = report
         has = report is not None and report.has_data
-        self._empty.setVisible(not has)
+        if not self._embed:
+            self._empty.setVisible(not has)
         self._stack.setVisible(has)
         self._status_items.clear()
         if not has:
@@ -360,7 +440,8 @@ class DataPage(QWidget):
         self._render_faults(report)
         self._render_flows(report)
         self._render_files(report)
-        self._stack_layout.addStretch(1)
+        if not self._embed:
+            self._stack_layout.addStretch(1)
 
     def _clear_stack(self):
         while self._stack_layout.count():
@@ -517,10 +598,11 @@ class AiPage(QWidget):
     start_requested = Signal()   # 用户点「开始 AI 诊断」→ wizard 起后台线程
     stop_requested = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, embed=False):
         super().__init__(parent)
         self.setObjectName("AiPage")
         self.setAttribute(Qt.WA_StyledBackground, True)
+        self._embed = embed
         self._report = None
         self._out_dir = None
         self._running = False
@@ -534,15 +616,22 @@ class AiPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         self._stack = QWidget()
         self._stack_layout = QVBoxLayout(self._stack)
-        self._stack_layout.setContentsMargins(24, 18, 24, 18)
+        if self._embed:
+            self._stack_layout.setContentsMargins(0, 0, 0, 0)
+        else:
+            self._stack_layout.setContentsMargins(24, 18, 24, 18)
         self._stack_layout.setSpacing(10)
-        self._stack_layout.addStretch(1)
+        if not self._embed:
+            self._stack_layout.addStretch(1)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(self._stack)
-        root.addWidget(scroll)
+        if self._embed:
+            root.addWidget(self._stack)            # 单页模式：内容直接嵌入，无内滚
+        else:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setWidget(self._stack)
+            root.addWidget(scroll)
 
         # ── 头部 ──
         self._stack_layout.insertLayout(0, self._header_row())
@@ -558,7 +647,7 @@ class AiPage(QWidget):
 
     def _header_row(self) -> QHBoxLayout:
         head = QHBoxLayout()
-        title = QLabel("AI 诊断")
+        title = QLabel("③ AI 诊断")
         title.setObjectName("SecTitle")
         title.setStyleSheet("font-size: 15px;")
         head.addWidget(title)
@@ -591,7 +680,7 @@ class AiPage(QWidget):
         self._symptom_input = QPlainTextEdit()
         self._symptom_input.setObjectName("AiInput")
         self._symptom_input.setPlaceholderText(
-            "例：动力不足、发动机抖动、故障灯亮…\n描述车辆当前的问题，越具体越好。")
+            "可留空：将自动依据故障码与数据流分析\n例：动力不足、发动机抖动、故障灯亮…")
         self._symptom_input.setFixedHeight(64)
         v.addWidget(self._symptom_input)
 
@@ -743,7 +832,7 @@ class AiPage(QWidget):
         if has:
             self._sum_lbl.setText(
                 f"基于 {len(report.faults)} 条故障码 + {len(report.flows)} 项数据流")
-            self._status_lbl.setText("输入故障现象后开始诊断")
+            self._status_lbl.setText("采集完成后将自动开始分析，也可手动填写现象后开始")
             out_dir = getattr(report, "out_dir", None)
             if out_dir and not self._running:
                 self.load_from(out_dir)
@@ -912,3 +1001,134 @@ class AiPage(QWidget):
             parts.append("</div>")
         parts.append("</body></html>")
         return "".join(parts)
+
+
+# ═══════════════════════════════════════════════════════════
+#  DiagnosticPage  单页连续诊断流（去掉分页切换）
+#  ①采集运行 → ②采集结果(紧凑摘要+可展开) → ③AI 诊断，随流程推进自动展开。
+# ═══════════════════════════════════════════════════════════
+
+class DiagnosticPage(QWidget):
+    """单页连续诊断流：三个既有页面类以 embed=True 组合进一个滚动区。"""
+
+    start_requested = Signal()    # 内嵌 AiPage 转发（开始 AI 诊断）
+    cancel_requested = Signal()   # 内嵌 RunPage 转发（取消 DTS）
+    back_requested = Signal()     # 底部「返回主页」
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("DiagnosticPage")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self._report = None
+        self._build_ui()
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        content.setObjectName("DiagnosticPage")
+        content.setAttribute(Qt.WA_StyledBackground, True)
+        self._content = QVBoxLayout(content)
+        self._content.setContentsMargins(24, 18, 24, 18)
+        self._content.setSpacing(14)
+
+        # ── ① 采集运行（始终可见） ──
+        self._content.addLayout(_section_header("① 采集运行"))
+        self.run = RunPage(embed=True)
+        self.run.cancel_requested.connect(self.cancel_requested)
+        self._content.addWidget(self.run)
+
+        # ── ② 采集结果（初始隐藏；紧凑摘要 + 可展开明细） ──
+        self._data_section = QFrame()
+        self._data_section.setObjectName("AiCard")
+        dv = QVBoxLayout(self._data_section)
+        dv.setContentsMargins(16, 14, 16, 14)
+        dv.setSpacing(8)
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        title = QLabel("② 采集结果")
+        title.setObjectName("AiHeader")
+        head.addWidget(title)
+        self._sum_chips = QHBoxLayout()
+        self._sum_chips.setSpacing(6)
+        head.addLayout(self._sum_chips)
+        head.addStretch(1)
+        self._toggle_btn = QPushButton("▸ 展开明细")
+        self._toggle_btn.setObjectName("Ghost")
+        self._toggle_btn.setCursor(Qt.PointingHandCursor)
+        self._toggle_btn.clicked.connect(self._toggle_detail)
+        head.addWidget(self._toggle_btn)
+        dv.addLayout(head)
+        self.data = DataPage(embed=True)
+        self.data.setVisible(False)
+        dv.addWidget(self.data)
+        self._data_section.setVisible(False)
+        self._content.addWidget(self._data_section)
+
+        # ── ③ AI 诊断（有数据后启用） ──
+        self.ai = AiPage(embed=True)
+        self.ai.start_requested.connect(self.start_requested)
+        self.ai.setVisible(False)
+        self._content.addWidget(self.ai)
+
+        # ── 底部返回 ──
+        foot = QHBoxLayout()
+        foot.addStretch(1)
+        self._back_btn = QPushButton("‹  返回主页")
+        self._back_btn.setObjectName("Ghost")
+        self._back_btn.setCursor(Qt.PointingHandCursor)
+        self._back_btn.clicked.connect(self.back_requested)
+        foot.addWidget(self._back_btn)
+        self._content.addLayout(foot)
+
+        self._scroll.setWidget(content)
+        root.addWidget(self._scroll)
+
+    # ── 对外接口 ──────────────────────────────────────
+
+    def set_report(self, report: Report | None):
+        """报告就绪：渲染数据明细 + AI 恢复，按 has_data 显示②③节"""
+        self._report = report
+        has = report is not None and report.has_data
+        self.data.set_report(report)
+        self.ai.set_report(report)
+        self._data_section.setVisible(has)
+        self.ai.setVisible(has)
+        if has:
+            self._rebuild_summary(report)
+
+    def _rebuild_summary(self, report: Report):
+        while self._sum_chips.count():
+            item = self._sum_chips.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        for text in (f"{len(report.faults)} 条故障码",
+                     f"{len(report.flows)} 项数据流",
+                     f"{len(report.files)} 个文件"):
+            chip = QLabel(text)
+            chip.setObjectName("Chip")
+            self._sum_chips.addWidget(chip)
+
+    def _toggle_detail(self):
+        on = self.data.isHidden()          # 收起态点击 → 展开（用 isHidden 判断显式状态）
+        self.data.setVisible(on)
+        self._toggle_btn.setText("▾ 收起明细" if on else "▸ 展开明细")
+        self.scroll_to(self.data if on else self._data_section)
+
+    def reset_all(self):
+        """新一次 DTS 前调用：收起②③节、清空 AI 结果"""
+        self._data_section.setVisible(False)
+        self.ai.setVisible(False)
+        self.data.setVisible(False)
+        self._toggle_btn.setText("▸ 展开明细")
+        self.ai.reset()
+
+    def scroll_to(self, widget):
+        """延迟到布局稳定后把 widget 滚入可视区（自动跟随当前阶段）"""
+        QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(widget, 60, 60))

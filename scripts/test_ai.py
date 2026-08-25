@@ -158,8 +158,13 @@ def make_fixture():
     tmp = Path(tempfile.mkdtemp(prefix="ai_fix_"))
     (tmp / "fault_codes.txt").write_text(
         "P2135 节气门位置传感器1/2电压相关性故障\n"
-        "P0100F9 空气流量计(HFM)的电器线过高\n",
+        "P0100F9 空气流量计(HFM)的电器线过高\n"
+        "P009B13 轨压压力控制阀(PCV)驱动电路开路\n",
         encoding="utf-8")
+    (tmp / "version_info.txt").write_text(
+        "VIN: LEFAFDG23NHN10204\n"
+        "应用软件识别: P1816_D20_V4310\n"
+        "CALID: E61CNC6D2P0FWM6D\n", encoding="utf-8")
     (tmp / "DataFlow_List_1.txt").write_text(
         "发动机转速\n油门踏板位置\n车速\n共轨压力\n", encoding="utf-8")
     csv_lines = [
@@ -181,6 +186,9 @@ def test_context():
     report, tmp = make_fixture()
 
     from ai.context import build_slots, csv_to_markdown, fault_codes_table, supported_streams
+    ok("十六进制故障码全解析", len(report.faults) == 3
+       and any(f.code == "P009B" for f in report.faults),
+       [f.code for f in report.faults])
     tbl = fault_codes_table(report)
     ok("故障码表含描述", "空气流量计" in tbl and "P2135" in tbl, tbl)
 
@@ -199,7 +207,10 @@ def test_context():
     ok("槽位含 CSV", "发动机转速" in slots["actual_data_csv"])
     ok("槽位含支持清单", "共轨压力" in slots["supported_streams_list"])
     ok("槽位含知识", len(slots["diagnostic_guide"]) > 200 and len(slots["pin_info"]) > 200)
-    ok("未填现象兜底", build_slots(report, "", "", None)["symptom"].strip() != "")
+    auto_slots = build_slots(report, "", "", None)
+    ok("空症状自动兜底", "故障码" in auto_slots["symptom"], auto_slots["symptom"])
+    ok("system_info 注入 VIN", "VIN:" in auto_slots["system_info"],
+       auto_slots["system_info"].splitlines()[0])
 
 
 def test_prompts():

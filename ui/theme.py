@@ -104,24 +104,20 @@ QLabel#Brand { color: {tx}; font-size: 15px; font-weight: 700; }
 QLabel#BrandAcc { color: {acc}; font-size: 15px; font-weight: 700; }
 QLabel#DevStatus { color: {dim}; font-size: 12px; }
 
-/* 向导步骤条 */
-QFrame#WizBar { background: {surface}; border: none; border-bottom: 1px solid {line}; }
-QFrame#StepBtn { background: transparent; border-radius: 8px; }
-QFrame#StepBtn:hover { background: {acc_soft}; }
-QFrame#StepBtn QLabel#StepDot { color: {dim}; background: {panel}; border: 1.5px solid {dim}; border-radius: 11px; font-weight: 700; font-size: 12px; }
-QFrame#StepBtn QLabel#StepLabel { color: {mut}; font-size: 13px; }
-QFrame#StepBtn QLabel#StepSub { color: {dim}; font-size: 11px; }
-QFrame#StepBtn[stepState="done"] QLabel#StepDot { background: {ok}; border-color: {ok}; color: #FFFFFF; }
-QFrame#StepBtn[stepState="done"] QLabel#StepLabel { color: {mut}; }
-QFrame#StepBtn[stepState="current"] QLabel#StepDot { background: {acc}; border-color: {acc}; color: {acc_ink}; }
-QFrame#StepBtn[stepState="current"] QLabel#StepLabel { color: {tx}; font-weight: 700; }
-QFrame#StepBtn[stepState="current"] QLabel#StepSub { color: {acc}; }
-QFrame#StepBtn[stepState="next"] QLabel#StepDot { background: {panel}; }
-QFrame#StepBtn[stepState="next"] QLabel#StepLabel { color: {dim}; }
+/* 流程进度指示条（纯展示，不可点击） */
+QFrame#PhaseBar { background: {surface}; border: none; }
+QFrame#PhaseBar QLabel#StepDot { color: {dim}; background: {panel}; border: 1.5px solid {dim}; border-radius: 11px; font-weight: 700; font-size: 12px; }
+QFrame#PhaseBar QLabel#StepLabel { color: {mut}; font-size: 13px; }
+QFrame#PhaseBar QLabel#StepSub { color: {dim}; font-size: 11px; }
+QFrame#PhaseBar QLabel#StepDot[stepState="done"] { background: {ok}; border-color: {ok}; color: #FFFFFF; }
+QFrame#PhaseBar QLabel#StepLabel[stepState="done"] { color: {mut}; }
+QFrame#PhaseBar QLabel#StepDot[stepState="current"] { background: {acc}; border-color: {acc}; color: {acc_ink}; }
+QFrame#PhaseBar QLabel#StepLabel[stepState="current"] { color: {tx}; font-weight: 700; }
+QFrame#PhaseBar QLabel#StepSub[stepState="current"] { color: {acc}; }
 QLabel#Conn { background: {line}; border-radius: 1px; }
 
 /* 页面 */
-QWidget#RunPage, QWidget#DataPage, QWidget#AiPage { background: {panel}; }
+QWidget#RunPage, QWidget#DataPage, QWidget#AiPage, QWidget#DiagnosticPage { background: {panel}; }
 QLabel#SecTitle { color: {dim}; font-size: 11px; font-weight: 600; }
 QLabel#SecCount { color: {dim}; font-family: Consolas, monospace; font-size: 11px; }
 

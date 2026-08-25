@@ -1,13 +1,13 @@
 """
-AutoDrive 主窗口：极简主页 + 向导面板（两级导航）
+AutoDrive 主窗口：极简主页 + 单页连续诊断流（两级导航）
 
 结构：
   ┌ root_stack ───────────────────────────┐
   │  0. HomePage    极简主页（开始诊断）      │
-  │  1. WizardPanel ──────────────────── │
+  │  1. DiagnosticPanel ──────────────── │
   │      顶栏：AutoDrive 品牌 + 设备状态     │
-  │      步骤条：① 运行 ② 数据 ③ AI 分析     │
-  │      QStackedWidget: Run / Data / Ai │
+  │      PhaseBar：①采集 ②数据 ③AI 进度指示  │
+  │      DiagnosticPage（单页滚动，随流程展开）│
   └───────────────────────────────────────┘
 
 引擎线程安全：FlowEngine 事件在工作线程触发 → EngineBridge(QObject) 信号
@@ -24,7 +24,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QStackedWidget, QVBoxLayout, QWidget,
@@ -37,7 +37,7 @@ if str(_HERE) not in sys.path:
 from automation.apps.dts import DtsApp
 from automation.flow.engine import FlowEngine
 from automation.flows.dts_flow import build_dts_flow, make_output_dir
-from ui.pages import AiPage, DataPage, HomePage, RunPage, _prop
+from ui.pages import DiagnosticPage, HomePage, PhaseBar
 from ui.report import ReportLoader
 from ui.theme import ThemeManager
 
@@ -84,53 +84,6 @@ class AiBridge(QObject):
     ai_finished = Signal(object)             # {"plan","locatability","report","out_dir"}
 
 
-class StepButton(QFrame):
-    """向导步骤：圆点数字 + 标签 + 副标题，状态 done/current/next"""
-    clicked = Signal(str)
-
-    def __init__(self, number, label, sub="", step=""):
-        super().__init__()
-        self.setObjectName("StepBtn")
-        self._step = step
-        self._clickable = False
-        self._number = str(number)
-        self.setCursor(Qt.ArrowCursor)
-
-        h = QHBoxLayout(self)
-        h.setContentsMargins(12, 6, 12, 6)
-        h.setSpacing(9)
-        self.dot = QLabel(self._number)
-        self.dot.setObjectName("StepDot")
-        self.dot.setFixedSize(22, 22)
-        self.dot.setAlignment(Qt.AlignCenter)
-        h.addWidget(self.dot)
-        v = QVBoxLayout()
-        v.setSpacing(0)
-        self.lbl = QLabel(label)
-        self.lbl.setObjectName("StepLabel")
-        v.addWidget(self.lbl)
-        self.sub = QLabel(sub)
-        self.sub.setObjectName("StepSub")
-        v.addWidget(self.sub)
-        h.addLayout(v)
-        self.setState("next")
-
-    def setState(self, state):
-        self.dot.setText("✓" if state == "done" else self._number)
-        _prop(self, "stepState", state)
-
-    def setClickable(self, on: bool):
-        self._clickable = on
-        self.setCursor(Qt.PointingHandCursor if on else Qt.ArrowCursor)
-        if on:
-            self.setToolTip("点击跳转")
-
-    def mousePressEvent(self, event):
-        if self._clickable and event.button() == Qt.LeftButton:
-            self.clicked.emit(self._step)
-        super().mousePressEvent(event)
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -151,6 +104,7 @@ class MainWindow(QMainWindow):
         self._running = False
         self._cancelled = False
         self._ai_running = False
+        self._pending_auto_ai = False   # 采集完成且有诊断数据 → 自动启动 AI 分析
         self._engine = None
         self._app = None
         self._out_dir = None
@@ -160,7 +114,7 @@ class MainWindow(QMainWindow):
         self._ai_bridge = AiBridge(self)
         self._build_ui()
         self._wire_bridge()
-        self._goto(0)
+        self._root_stack.setCurrentIndex(0)
 
     # ── UI 构建 ──────────────────────────────────
 
@@ -205,41 +159,20 @@ class MainWindow(QMainWindow):
         th.addStretch(1)
         pv.addWidget(tbar)
 
-        # ── 步骤条 ──
-        wizbar = QFrame()
-        wizbar.setObjectName("WizBar")
-        wh = QHBoxLayout(wizbar)
-        wh.setContentsMargins(16, 6, 16, 6)
-        wh.setSpacing(2)
-        wh.addStretch(1)
-        self._step_btns = []
-        specs = [("1", "运行", "运行 DTS 流程", "run"),
-                 ("2", "数据", "故障码 / 数据流 / 文件", "data"),
-                 ("3", "AI 分析", "采集计划 / 路试 / 报告", "ai")]
-        for i, (num, label, sub, key) in enumerate(specs):
-            if i:
-                conn = QFrame()
-                conn.setObjectName("Conn")
-                conn.setFixedSize(30, 2)
-                wh.addWidget(conn)
-            btn = StepButton(num, label, sub, key)
-            btn.clicked.connect(self._on_step_clicked)
-            self._step_btns.append(btn)
-            wh.addWidget(btn)
-        wh.addStretch(1)
-        pv.addWidget(wizbar)
+        # ── 进度指示（纯展示，不可点击） ──
+        self._phase_bar = PhaseBar()
+        pv.addWidget(self._phase_bar)
 
-        # ── 页面 ──
-        self._stack = QStackedWidget()
-        self.pages.run = RunPage()
-        self.pages.data = DataPage()
-        self.pages.ai = AiPage()
-        self.pages.run.cancel_requested.connect(self._cancel_run)
-        self.pages.run.back_requested.connect(self._go_home)
-        self.pages.ai.start_requested.connect(self._start_ai_diagnosis)
-        for p in (self.pages.run, self.pages.data, self.pages.ai):
-            self._stack.addWidget(p)
-        pv.addWidget(self._stack, 1)
+        # ── 单页连续诊断流（①采集→②数据→③AI 全在一页，随流程展开） ──
+        self.pages.diag = DiagnosticPage()
+        # 保留别名，让既有调用点（wizard 内部 + 冒烟测试）零改动
+        self.pages.run = self.pages.diag.run
+        self.pages.data = self.pages.diag.data
+        self.pages.ai = self.pages.diag.ai
+        self.pages.diag.start_requested.connect(self._start_ai_diagnosis)
+        self.pages.diag.cancel_requested.connect(self._cancel_run)
+        self.pages.diag.back_requested.connect(self._go_home)
+        pv.addWidget(self.pages.diag, 1)
 
         self._root_stack.addWidget(panel)
 
@@ -259,21 +192,11 @@ class MainWindow(QMainWindow):
         ab.ai_failed.connect(self._on_ai_failed)
         ab.ai_finished.connect(self._on_ai_finished)
 
-    # ── 向导导航 ─────────────────────────────────
+    # ── 流程阶段指示 ────────────────────────────────
 
-    def _step_index(self, key: str) -> int:
-        return {"run": 0, "data": 1, "ai": 2}[key]
-
-    def _on_step_clicked(self, key: str):
-        idx = self._step_index(key)
-        if idx != self._stack.currentIndex():
-            self._goto(idx)
-
-    def _goto(self, idx: int):
-        self._stack.setCurrentIndex(idx)
-        for i, btn in enumerate(self._step_btns):
-            state = "current" if i == idx else ("done" if i < idx else "next")
-            btn.setState(state)
+    def _set_phase(self, phase: str):
+        """phase ∈ "run" | "data" | "ai"，同步顶部进度条"""
+        self._phase_bar.set_phase(phase)
 
     def _go_home(self):
         if self._running:
@@ -301,13 +224,14 @@ class MainWindow(QMainWindow):
         self._wire_engine(self._engine)
 
         page = self.pages.run
+        self.pages.diag.reset_all()
         page.reset_steps(self._engine.steps)
         page.set_running(True)
         page.set_status(f"启动 {dev['name']} 自动化…")
 
-        # 进入向导面板并从第一步开始执行
+        # 进入单页诊断流并从采集阶段开始
         self._root_stack.setCurrentIndex(1)
-        self._goto(0)
+        self._set_phase("run")
         threading.Thread(target=self._run_engine, daemon=True).start()
 
     def _wire_engine(self, eng: FlowEngine):
@@ -356,11 +280,14 @@ class MainWindow(QMainWindow):
     def _on_flow_done(self, engine):
         self.pages.run.render_steps()
         self.pages.run.set_status("流程完成 — 正在整理数据…")
-        self._load_report(advance=True)
+        report = self._load_report(advance=True)
+        # 有故障码或数据流 → 待运行线程收尾后自动启动 AI 分析
+        self._pending_auto_ai = bool(report and (report.faults or report.flows))
 
     def _on_flow_cancelled(self, engine):
         self.pages.run.render_steps()
         self.pages.run.set_status("流程已取消")
+        self._pending_auto_ai = False
         self._load_report(advance=False)
 
     def _on_run_finished(self):
@@ -368,38 +295,50 @@ class MainWindow(QMainWindow):
         self.pages.home.set_busy(False)
         self.pages.run.set_running(False)
         self._dev_status.setText("○ 就绪")
+        if self._pending_auto_ai:
+            self._pending_auto_ai = False
+            self._start_ai_diagnosis(auto=True)
 
     # ── 报告加载 → 数据 / AI 页 ───────────────────
 
     def _load_report(self, advance: bool):
         if not self._out_dir:
-            return
+            return None
         report = self._report_loader.load(self._out_dir)
-        self.pages.data.set_report(report)
-        self.pages.ai.set_report(report)
-        if report.has_data:
-            self._step_btns[1].setClickable(True)
-            self._step_btns[2].setClickable(True)
-            if advance:
-                self._goto(1)
+        self.pages.diag.set_report(report)
+        if report.has_data and advance:
+            # 自动跟随当前阶段：滚到「采集结果」摘要，方便紧接着发起 AI 诊断
+            self._set_phase("data")
+            self.pages.diag.scroll_to(self.pages.diag._data_section)
+        return report
 
 
     # ── AI 诊断（三阶段链路） ──────────────────────
 
-    def _start_ai_diagnosis(self):
+    def _start_ai_diagnosis(self, auto: bool = False):
+        """auto=True：采集完成后自动触发，症状留空走 build_slots 自动兜底。"""
         if self._running or self._ai_running:
             return
         if not self._out_dir:
             self.pages.ai.show_error("尚未生成报告，请先运行一次 DTS 流程")
             return
-        symptom, notes = self.pages.ai.get_input()
-        if not symptom:
-            self.pages.ai.show_error("请先填写故障现象")
-            return
+        if auto:
+            symptom, notes = "", ""   # 自动模式：以故障码为依据推断
+        else:
+            symptom, notes = self.pages.ai.get_input()
+            if not symptom:
+                self.pages.ai.show_error("请先填写故障现象")
+                return
 
         from ai.deepseek import DeepSeekClient
         client = DeepSeekClient()
         if not client.configured:
+            if auto:
+                # 自动模式未配置 key：软跳过，不打断采集收尾
+                self.pages.ai.set_status(
+                    "未配置 DeepSeek API Key，自动诊断已跳过；配置后再次运行将自动分析")
+                self._dev_status.setText("○ 就绪")
+                return
             self.pages.ai.show_error(
                 "未配置 DeepSeek API Key（环境变量 DEEPSEEK_API_KEY 或 data/config.json 的 api_key）")
             return
@@ -411,6 +350,8 @@ class MainWindow(QMainWindow):
         self.pages.ai.set_running(True)
         self.pages.ai.set_status("正在确认采集列表…")
         self._dev_status.setText("● AI 分析中")
+        self._set_phase("ai")
+        self.pages.diag.scroll_to(self.pages.diag.ai)
 
         threading.Thread(
             target=self._run_ai_chain,
@@ -450,13 +391,16 @@ class MainWindow(QMainWindow):
             self.pages.ai.set_stage(1, "done", "完成")
             self.pages.ai.show_plan(obj.asdict())
             self.pages.ai.set_status("采集计划已生成，正在判断是否需要路试…")
+            self.pages.diag.scroll_to(self.pages.ai._plan_card_ref())
         elif no == 2:
             self.pages.ai.set_stage(2, "done", "完成")
             self.pages.ai.show_locatability(obj.asdict())
             self.pages.ai.set_status("路试判断完成，正在输出维修报告…")
+            self.pages.diag.scroll_to(self.pages.ai._loc_card_ref())
         elif no == 3:
             self.pages.ai.set_stage(3, "done", "完成")
             self.pages.ai.show_report(obj)
+            self.pages.diag.scroll_to(self.pages.ai._report_card_ref())
 
     def _on_ai_finished(self, result):
         self._ai_running = False

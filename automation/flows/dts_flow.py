@@ -30,6 +30,38 @@ def make_output_dir(root: Path = None) -> Path:
     return out_dir
 
 
+def _desktop_dir() -> Path:
+    """鲁棒解析用户桌面路径（DTS 保存数据流列表的默认目录，支持 OneDrive 重定向）"""
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(512)
+        # CSIDL_DESKTOPDIRECTORY = 0x0010
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 0x0010, None, 0, buf) == 0:
+            p = Path(buf.value)
+            if p.exists():
+                return p
+    except Exception:  # noqa: BLE001
+        pass
+    return Path.home() / "Desktop"
+
+
+def _copy_dataflow_list(out_dir: Path, flow_no: int, desktop: Path = None) -> None:
+    """DTS 把 DataFlow_List_N.txt 默认存到桌面 → 拷回 out_dir（AI 支持清单/数据流数据源）。
+
+    desktop 参数供单测注入临时目录；默认真实桌面。
+    """
+    fname = f"DataFlow_List_{flow_no}.txt"
+    src = (desktop if desktop is not None else _desktop_dir()) / fname
+    try:
+        if src.exists():
+            shutil.copy2(src, out_dir / fname)
+            log.info("  ✓ 数据流列表已拷入: %s", out_dir / fname)
+        else:
+            log.warning("  桌面未找到 %s（DTS 保存目录可能不是桌面）", src)
+    except Exception as e:  # noqa: BLE001
+        log.warning("  复制数据流列表失败: %s", e)
+
+
 def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     """
     构建 DTS 完整流程的步骤列表
@@ -209,6 +241,8 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
 
         # 执行当前数据流操作
         _process_flow(app, flow_count)
+        # 数据流列表被 DTS 存到桌面 → 拷回 out_dir，供 AI 阶段1 支持清单使用
+        _copy_dataflow_list(out_dir, flow_count)
         log.info(f"  数据流{flow_count} 完成")
         app.wait_for_control("1")
         # 弹窗确定

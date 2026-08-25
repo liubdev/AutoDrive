@@ -18,7 +18,8 @@ from pathlib import Path
 
 log = logging.getLogger("autodrive.ui.report")
 
-DTC_RE = re.compile(r"[PBCU]\d{4}")
+# P 码 4 位可为十六进制（真实样本 P009B/P21C7/P203F…），子码段如 F9/13 由描述清洗处理
+DTC_RE = re.compile(r"[PBCU][0-9A-F]{4}")
 
 # 轻量严重度推断：命中这些关键词判"严重"，否则"一般"
 _CRIT_KEYWORDS = ("失火", "爆震", "停缸", "断油", "ecu", "安全")

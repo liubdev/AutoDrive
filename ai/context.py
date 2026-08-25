@@ -158,6 +158,31 @@ def csv_to_markdown(out_dir) -> str:
 
 # ── 各阶段槽位字典 ──────────────────────────────
 
+def _auto_symptom(report) -> str:
+    """空症状兜底：自动化采集时无需人工填写，改为从故障码推导诊断依据"""
+    codes = getattr(report, "faults", None) or []
+    if codes:
+        names = "、".join(fc.code for fc in codes[:6])
+        more = "…" if len(codes) > 6 else ""
+        return (f"（自动采集，未填写人工现象）当前报出 {len(codes)} 个故障码（{names}{more}），"
+                "请以故障码与采集数据流为主要诊断依据。")
+    return "（自动采集，未填写人工现象）请基于采集到的故障码与数据流进行诊断。"
+
+
+def vehicle_info(report) -> str:
+    """从 version_info.txt 提取 VIN/ECU 识别行（拼接进 system_info 槽）"""
+    text = getattr(report, "version", "") or ""
+    pick = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if (s.startswith("VIN:") or "应用软件识别" in s or s.startswith("CALID:")
+                or "ECU软件号" in s or "ECU软件版本" in s):
+            pick.append(s)
+    return "\n".join(pick)
+
+
 def build_slots(report, symptom: str, notes: str, knowledge=None,
                 stage_results: dict = None) -> dict:
     """
@@ -179,7 +204,7 @@ def build_slots(report, symptom: str, notes: str, knowledge=None,
     plan = results.get("plan")
     loc = results.get("locatability")
 
-    symptom = (symptom or "").strip() or _NOTICE
+    symptom = (symptom or "").strip() or _auto_symptom(report)
     notes = (notes or "").strip()
 
     engine_tbl = fault_codes_table(report)
@@ -195,6 +220,8 @@ def build_slots(report, symptom: str, notes: str, knowledge=None,
         result_analysis = _NOTICE
         root_cause = _NOTICE
     working_conditions = (plan.working_conditions if plan else "") or _NOTICE
+
+    _veh = vehicle_info(report)
 
     return {
         # 用户输入
@@ -222,8 +249,9 @@ def build_slots(report, symptom: str, notes: str, knowledge=None,
         "data_stream_status": working_conditions,
         "working_conditions": working_conditions,
 
-        # 车辆信息
-        "system_info": k["system_info"],
+        # 车辆信息（真实 VIN/ECU 前置，缺失时回退知识库默认）
+        "system_info": (f"{_veh}\n{k['system_info']}".strip()
+                        if _veh else k["system_info"]),
         "enginepar_info": k["engine_par"],
         "target_subsystems": k["subsystems"],
         "target_components": k["components"],
