@@ -66,22 +66,39 @@ def main():
     app = QApplication([])
     w = MainWindow()
 
+    # 0. 双视图：启动即主页（设备选择），点击车型卡进入分析页
+    from PySide6.QtWidgets import QStackedWidget
+    ok("启动为双视图结构", isinstance(w._stack, QStackedWidget)
+       and w._stack.currentIndex() == 0)
+    ok("主页存在（设备选择）", hasattr(w, "home") and w.home._cards
+       and len(w.home._cards) == 4)
+    w._on_device_selected("轿车")
+    ok("点车型卡 → 分析页", w._stack.currentIndex() == 1
+       and w._vehicle == "轿车")
+    ok("面包屑显示车型", w.pages.diag._crumb_lbl.text() == "轿车 诊断",
+       w.pages.diag._crumb_lbl.text())
+    ok("进入即步进器①✓②●", [d.property("stepState") for (d, _l, _s) in w._phase_bar._dots]
+       == ["done", "current", "next", "next"])
+    ok("摘要条显示车型", w.pages.ai._summary_lbl.text().startswith("车型：轿车"),
+       w.pages.ai._summary_lbl.text())
+
     # 1. set_report → 按钮可用 + 数据计数
     w._out_dir = tmp
     report = ReportLoader().load(tmp)
     w.pages.ai.set_report(report)
-    ok("报告加载后按钮可用", w.pages.ai._run_btn.isEnabled())
+    ok("报告加载后发送按钮可用", w.pages.ai._run_btn.isEnabled())
     ok("数据计数显示", "1 条故障码" in w.pages.ai._sum_lbl.text(), w.pages.ai._sum_lbl.text())
 
     # 2. 输入 + reset + 运行态
-    w.pages.ai._symptom_input.setPlainText("动力不足，爬坡无力")
-    w.pages.ai._notes_input.setPlainText("已换过空滤")
+    w.pages.ai._symptom_input.setText("动力不足，爬坡无力")
+    w.pages.ai._notes_input.setText("已换过空滤")
     sym, notes = w.pages.ai.get_input()
     ok("输入读取", sym == "动力不足，爬坡无力" and notes == "已换过空滤")
     w.pages.ai.reset()
     w.pages.ai.set_running(True)
     ok("运行态按钮禁用", not w.pages.ai._run_btn.isEnabled())
-    ok("运行态文案", w.pages.ai._run_btn.text() == "诊断中…")
+    ok("运行态文案", w.pages.ai._status_lbl.text() == "诊断中…",
+       w.pages.ai._status_lbl.text())
 
     # 3. 三阶段事件驱动（模拟 wizard 信号处理器）
     plan = CollectionPlan(
@@ -107,16 +124,21 @@ def main():
     }
     w._on_ai_stage_done(3, "输出维修报告", report_data)
     ok("阶段3 done + 报告卡可见", not w.pages.ai._report_card_ref().isHidden())
-    ok("报告 HTML 渲染", "燃油计量单元" in w.pages.ai._report_browser.toHtml())
-
-    w.pages.ai.set_running(False)
+    ok("报告 widget 渲染", "燃油计量单元" in w.pages.ai._report_texts())
+    ok("报告后出现操作按钮", not w.pages.ai._action_card_ref().isHidden()
+       and w.pages.ai._export_btn.text() == "导出诊断报告")
+    w._on_ai_finished({"plan": None, "locatability": None,
+                       "report": report_data, "out_dir": str(tmp)})
+    ok("步进器 report 阶段", [d.property("stepState") for (d, _l, _s) in w._phase_bar._dots]
+       == ["done", "done", "done", "current"])
     ok("结束按钮恢复", w.pages.ai._run_btn.isEnabled()
-       and w.pages.ai._run_btn.text() == "开始 AI 诊断")
+       and w.pages.ai._status_lbl.text() == "诊断完成 — 可查看采集计划 / 路试判断 / 维修报告",
+       w.pages.ai._status_lbl.text())
 
     # 4. 错误路径
     w._on_ai_failed("未配置 DeepSeek API Key")
-    ok("失败文案 + 按钮重试", "失败" in w.pages.ai._status_lbl.text()
-       and w.pages.ai._run_btn.text() == "重试")
+    ok("失败文案 + 可重试", "失败" in w.pages.ai._status_lbl.text()
+       and w.pages.ai._run_btn.isEnabled(), w.pages.ai._status_lbl.text())
 
     # 5. load_from：模拟重跑后从 out_dir 恢复
     w.pages.ai.reset()
@@ -126,9 +148,18 @@ def main():
     w.pages.ai.load_from(tmp)
     ok("load_from 恢复采集计划", not w.pages.ai._plan_card_ref().isHidden())
 
-    # 6. set_report(None) → 按钮禁用
+    # 6. set_report(None) → 回到等待态（发送按钮始终可用：发送即采集+AI）
     w.pages.ai.set_report(None)
-    ok("无报告按钮禁用", not w.pages.ai._run_btn.isEnabled())
+    ok("无报告回到等待态", w.pages.ai._run_btn.isEnabled()
+       and w.pages.ai._sum_lbl.text() == "等待运行数据",
+       w.pages.ai._sum_lbl.text())
+
+    # 6b. 面包屑返回主页（未运行时）
+    w._on_back()
+    ok("返回主页", w._stack.currentIndex() == 0)
+    w._on_device_selected("SUV")
+    ok("再次进入分析页（SUV）", w._stack.currentIndex() == 1
+       and w.pages.diag._crumb_lbl.text() == "SUV 诊断")
 
     # 7. 单页连续流：节可见性 / 摘要 chips / 展开收起
     diag = w.pages.diag
@@ -146,14 +177,20 @@ def main():
     ok("收起明细后 detail 隐藏", diag.data.isHidden())
     ok("展开按钮文案复位", diag._toggle_btn.text() == "▸ 展开明细")
 
-    # 8. PhaseBar 三态（纯展示，不可点击）
+    # 8. PhaseBar 四节点（ct2，纯展示，不可点击）
     pb = PhaseBar()
+    pb.set_phase("run")
+    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
+    ok("PhaseBar run 阶段", st == ["done", "current", "next", "next"], st)
     pb.set_phase("data")
     st = [d.property("stepState") for (d, _l, _s) in pb._dots]
-    ok("PhaseBar data 阶段", st == ["done", "current", "next"], st)
+    ok("PhaseBar data 阶段", st == ["done", "done", "current", "next"], st)
     pb.set_phase("ai")
     st = [d.property("stepState") for (d, _l, _s) in pb._dots]
-    ok("PhaseBar ai 阶段", st == ["done", "done", "current"], st)
+    ok("PhaseBar ai 阶段", st == ["done", "done", "current", "next"], st)
+    pb.set_phase("report")
+    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
+    ok("PhaseBar report 阶段", st == ["done", "done", "done", "current"], st)
 
     # 9. embed 模式：无内滚 / 无空态 / 无页面级返回按钮
     ok("RunPage embed 无内滚", _scroll_count(diag.run) == 0)
@@ -176,9 +213,9 @@ def main():
     # 12. 采集完成 → 自动触发 AI（未配置 key 时软跳过，不打断收尾）
     import ai.deepseek as _ds
     w._out_dir = tmp
-    w._on_flow_done(None)               # 有故障码 → pending 置位、PhaseBar→data
+    w._on_flow_done(None)               # 有故障码 → pending 置位、PhaseBar→③AI分析中
     ok("流程完成 pending 自动 AI", w._pending_auto_ai is True
-       and w._phase_bar._dots[1][0].property("stepState") == "current")
+       and w._phase_bar._dots[2][0].property("stepState") == "current")
     _saved_cfg = _ds.DeepSeekClient.configured
     _ds.DeepSeekClient.configured = property(lambda self: False)
     try:

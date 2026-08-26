@@ -1,14 +1,19 @@
 """
-AutoDrive 主窗口：极简主页 + 单页连续诊断流（两级导航）
+AutoDrive 主窗口：共享顶栏 + 双视图（主页设备选择 → 分析页）
 
 结构：
-  ┌ root_stack ───────────────────────────┐
-  │  0. HomePage    极简主页（开始诊断）      │
-  │  1. DiagnosticPanel ──────────────── │
-  │      顶栏：AutoDrive 品牌 + 设备状态     │
-  │      PhaseBar：①采集 ②数据 ③AI 进度指示  │
-  │      DiagnosticPage（单页滚动，随流程展开）│
-  └───────────────────────────────────────┘
+  ┌ root ─────────────────────────────────────────┐
+  │  顶栏：蓝盾标 AutoDrive v1.0.0 · 设备状态 · 历史/设置 │
+  │  QStackedWidget                               │
+  │    view0 HomePage        主页·设备选择（ct1）        │
+  │    view1 DiagnosticPage  分析页（ct2）              │
+  │      ├ 面包屑：‹ 返回 / 车型 诊断                     │
+  │      ├ 步进器：①选择车型 ②描述问题 ③AI分析中 ④诊断报告     │
+  │      └ 单页滚动：①采集运行 → ②采集结果 → ③诊断分析         │
+  └──────────────────────────────────────────────┘
+
+进入流程：主页点车型卡 → 分析页；填写故障现象点发送 → DTS 采集 + AI 三阶段链路，
+完成后自动滚到维修报告（重新诊断 / 导出诊断报告）。
 
 引擎线程安全：FlowEngine 事件在工作线程触发 → EngineBridge(QObject) 信号
 自动以 QueuedConnection 投递回主线程，UI 只响应信号。
@@ -24,7 +29,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QStackedWidget, QVBoxLayout, QWidget,
@@ -37,7 +42,7 @@ if str(_HERE) not in sys.path:
 from automation.apps.dts import DtsApp
 from automation.flow.engine import FlowEngine
 from automation.flows.dts_flow import build_dts_flow, make_output_dir
-from ui.pages import DiagnosticPage, HomePage, PhaseBar
+from ui.pages import DiagnosticPage, GlyphButton, HomePage, ShieldMark
 from ui.report import ReportLoader
 from ui.theme import ThemeManager
 
@@ -59,7 +64,6 @@ DEVICES = [
         "id": "dts",
         "name": "DTS 诊断仪",
         "desc": "DTS650 数据流读取 / 故障码诊断",
-        "icon": "🔧",
         "class": DtsApp,
         "build_flow": build_dts_flow,
     },
@@ -77,7 +81,7 @@ class EngineBridge(QObject):
 
 
 class AiBridge(QObject):
-    """AI 诊断链事件桥（工作线程 → 主线程）"""
+    """诊断分析链事件桥（工作线程 → 主线程）"""
     stage_started = Signal(int, str)         # (stage_no, name)
     stage_done = Signal(int, str, object)    # (stage_no, name, result_obj)
     ai_failed = Signal(str)                  # 用户可读错误
@@ -104,7 +108,10 @@ class MainWindow(QMainWindow):
         self._running = False
         self._cancelled = False
         self._ai_running = False
-        self._pending_auto_ai = False   # 采集完成且有诊断数据 → 自动启动 AI 分析
+        self._pending_auto_ai = False   # 采集完成且有诊断数据 → 自动启动诊断分析
+        self._pending_symptom = ""      # 发送时捕获的故障现象（自动 AI 阶段用）
+        self._pending_notes = ""
+        self._vehicle = ""              # 主页选择的车型（轿车/SUV/…）
         self._engine = None
         self._app = None
         self._out_dir = None
@@ -114,7 +121,6 @@ class MainWindow(QMainWindow):
         self._ai_bridge = AiBridge(self)
         self._build_ui()
         self._wire_bridge()
-        self._root_stack.setCurrentIndex(0)
 
     # ── UI 构建 ──────────────────────────────────
 
@@ -125,56 +131,51 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # 两级导航：0 主页 → 1 向导面板
-        self._root_stack = QStackedWidget()
-        root.addWidget(self._root_stack, 1)
-
-        self.pages = _Pages()
-        self.pages.home = HomePage()
-        self.pages.home.start_requested.connect(self._start_run)
-        self._root_stack.addWidget(self.pages.home)
-
-        panel = QWidget()
-        pv = QVBoxLayout(panel)
-        pv.setContentsMargins(0, 0, 0, 0)
-        pv.setSpacing(0)
-
-        # ── 顶栏：品牌 + 设备状态 ──
+        # ── 共享顶栏（ct1/ct2 通用）：蓝盾标 + AutoDrive + v1.0.0 胶囊 + 设备状态 + 历史/设置 ──
         tbar = QFrame()
         tbar.setObjectName("TBar")
-        tbar.setFixedHeight(46)
+        tbar.setFixedHeight(58)
         th = QHBoxLayout(tbar)
-        th.setContentsMargins(18, 0, 14, 0)
-        th.setSpacing(0)
-        b1 = QLabel("Auto")
-        b1.setObjectName("Brand")
-        b2 = QLabel("Drive")
-        b2.setObjectName("BrandAcc")
-        th.addWidget(b1)
-        th.addWidget(b2)
-        th.addSpacing(14)
+        th.setContentsMargins(18, 0, 16, 0)
+        th.setSpacing(10)
+        th.addWidget(ShieldMark(size=28))
+        brand = QLabel("AutoDrive")
+        brand.setObjectName("Brand")
+        th.addWidget(brand)
+        ver = QLabel("v1.0.0")
+        ver.setObjectName("VersionPill")
+        th.addWidget(ver)
+        th.addSpacing(12)
         self._dev_status = QLabel("○ 就绪")
         self._dev_status.setObjectName("DevStatus")
         th.addWidget(self._dev_status)
         th.addStretch(1)
-        pv.addWidget(tbar)
+        th.addWidget(GlyphButton("history", tooltip="历史记录"))
+        th.addWidget(GlyphButton("settings", tooltip="设置"))
+        root.addWidget(tbar)
 
-        # ── 进度指示（纯展示，不可点击） ──
-        self._phase_bar = PhaseBar()
-        pv.addWidget(self._phase_bar)
+        # ── 双视图：view0 主页·设备选择 / view1 分析页（ct2） ──
+        self.pages = _Pages()
+        self._stack = QStackedWidget()
 
-        # ── 单页连续诊断流（①采集→②数据→③AI 全在一页，随流程展开） ──
+        self.home = HomePage()
+        self.home.device_selected.connect(self._on_device_selected)
+
         self.pages.diag = DiagnosticPage()
         # 保留别名，让既有调用点（wizard 内部 + 冒烟测试）零改动
         self.pages.run = self.pages.diag.run
         self.pages.data = self.pages.diag.data
         self.pages.ai = self.pages.diag.ai
-        self.pages.diag.start_requested.connect(self._start_ai_diagnosis)
+        self.pages.diag.start_requested.connect(self._start_diag_flow)
         self.pages.diag.cancel_requested.connect(self._cancel_run)
-        self.pages.diag.back_requested.connect(self._go_home)
-        pv.addWidget(self.pages.diag, 1)
+        self.pages.diag.back_requested.connect(self._on_back)
+        self.pages.ai.restart_requested.connect(self._on_restart)
+        self._phase_bar = self.pages.diag._phase_bar   # 步进器内嵌分析页顶部
 
-        self._root_stack.addWidget(panel)
+        self._stack.addWidget(self.home)
+        self._stack.addWidget(self.pages.diag)
+        self._stack.setCurrentIndex(0)                 # 启动即主页（设备选择）
+        root.addWidget(self._stack, 1)
 
     def _wire_bridge(self):
         b = self._bridge
@@ -198,21 +199,17 @@ class MainWindow(QMainWindow):
         """phase ∈ "run" | "data" | "ai"，同步顶部进度条"""
         self._phase_bar.set_phase(phase)
 
-    def _go_home(self):
-        if self._running:
-            return
-        self._root_stack.setCurrentIndex(0)
-
     # ── 运行流程 ─────────────────────────────────
 
     def _start_run(self):
+        """执行 DTS 采集（发送后由 _start_diag_flow 调用；完成后自动启动 AI 诊断）"""
         if self._running:
             return
         dev = DEVICES[0]
         self._running = True
         self._cancelled = False
         self._dev_status.setText("● 执行中")
-        self.pages.home.set_busy(True)
+        self.pages.diag.set_back_enabled(False)
 
         app = dev["class"]()
         self._app = app
@@ -229,10 +226,42 @@ class MainWindow(QMainWindow):
         page.set_running(True)
         page.set_status(f"启动 {dev['name']} 自动化…")
 
-        # 进入单页诊断流并从采集阶段开始
-        self._root_stack.setCurrentIndex(1)
-        self._set_phase("run")
+        # 采集 + AI 统一归入 ct2 第③节点「AI 分析中」
+        self._set_phase("ai")
         threading.Thread(target=self._run_engine, daemon=True).start()
+
+    def _start_diag_flow(self):
+        """ct2 发送：捕获故障现象 → 阶段③ → DTS 采集，完成后自动 AI 诊断"""
+        if self._running or self._ai_running:
+            return
+        symptom, notes = self.pages.ai.get_input()
+        self._pending_symptom = symptom
+        self._pending_notes = notes
+        self.pages.ai.set_summary(self._vehicle, symptom)
+        self._set_phase("ai")
+        self._start_run()
+
+    def _on_device_selected(self, vehicle: str):
+        """主页车型卡点击 → 进入分析页（记录车型 + 步进器就位 + 聚焦输入）"""
+        self._vehicle = vehicle
+        self.pages.diag.set_vehicle(vehicle)
+        self.pages.ai.set_summary(vehicle, "")
+        self._stack.setCurrentIndex(1)
+        self._set_phase("run")
+        QTimer.singleShot(0, self.pages.ai.focus_input)
+
+    def _on_back(self):
+        """面包屑返回主页（流程运行中禁止）"""
+        if self._running or self._ai_running:
+            return
+        self._stack.setCurrentIndex(0)
+
+    def _on_restart(self):
+        """重新诊断：清空结果、回到输入、步进器回到②描述问题"""
+        self.pages.ai.reset()
+        self._set_phase("run")
+        self.pages.ai.focus_input()
+        self.pages.diag.scroll_to(self.pages.ai._input_card_ref())
 
     def _wire_engine(self, eng: FlowEngine):
         b = self._bridge
@@ -281,7 +310,7 @@ class MainWindow(QMainWindow):
         self.pages.run.render_steps()
         self.pages.run.set_status("流程完成 — 正在整理数据…")
         report = self._load_report(advance=True)
-        # 有故障码或数据流 → 待运行线程收尾后自动启动 AI 分析
+        # 有故障码或数据流 → 待运行线程收尾后自动启动诊断分析
         self._pending_auto_ai = bool(report and (report.faults or report.flows))
 
     def _on_flow_cancelled(self, engine):
@@ -292,14 +321,15 @@ class MainWindow(QMainWindow):
 
     def _on_run_finished(self):
         self._running = False
-        self.pages.home.set_busy(False)
         self.pages.run.set_running(False)
         self._dev_status.setText("○ 就绪")
         if self._pending_auto_ai:
             self._pending_auto_ai = False
             self._start_ai_diagnosis(auto=True)
+        else:
+            self.pages.diag.set_back_enabled(True)
 
-    # ── 报告加载 → 数据 / AI 页 ───────────────────
+    # ── 报告加载 → 数据 / 诊断页 ───────────────────
 
     def _load_report(self, advance: bool):
         if not self._out_dir:
@@ -307,28 +337,32 @@ class MainWindow(QMainWindow):
         report = self._report_loader.load(self._out_dir)
         self.pages.diag.set_report(report)
         if report.has_data and advance:
-            # 自动跟随当前阶段：滚到「采集结果」摘要，方便紧接着发起 AI 诊断
+            # 自动跟随当前阶段：滚到「采集结果」摘要，方便紧接着发起诊断分析
             self._set_phase("data")
             self.pages.diag.scroll_to(self.pages.diag._data_section)
         return report
 
 
-    # ── AI 诊断（三阶段链路） ──────────────────────
+    # ── 诊断分析（三阶段链路） ──────────────────────
 
     def _start_ai_diagnosis(self, auto: bool = False):
-        """auto=True：采集完成后自动触发，症状留空走 build_slots 自动兜底。"""
+        """auto=True：采集完成后自动触发，用发送时捕获的故障现象；否则取输入框。"""
         if self._running or self._ai_running:
             return
         if not self._out_dir:
             self.pages.ai.show_error("尚未生成报告，请先运行一次 DTS 流程")
             return
         if auto:
-            symptom, notes = "", ""   # 自动模式：以故障码为依据推断
+            symptom = self._pending_symptom or ""
+            notes = self._pending_notes or ""
         else:
             symptom, notes = self.pages.ai.get_input()
             if not symptom:
                 self.pages.ai.show_error("请先填写故障现象")
                 return
+        # 车型并入 AI 上下文（三阶段链路都可见）
+        if self._vehicle:
+            notes = f"车辆类型：{self._vehicle}\n{notes}" if notes else f"车辆类型：{self._vehicle}"
 
         from ai.deepseek import DeepSeekClient
         client = DeepSeekClient()
@@ -349,7 +383,7 @@ class MainWindow(QMainWindow):
         self.pages.ai.reset()
         self.pages.ai.set_running(True)
         self.pages.ai.set_status("正在确认采集列表…")
-        self._dev_status.setText("● AI 分析中")
+        self._dev_status.setText("● 分析中")
         self._set_phase("ai")
         self.pages.diag.scroll_to(self.pages.diag.ai)
 
@@ -377,11 +411,11 @@ class MainWindow(QMainWindow):
                 callbacks={"stage_start": stage_start, "stage_done": stage_done})
             self._ai_bridge.ai_finished.emit(result)
         except AiError as e:
-            _safe_log(logging.ERROR, "AI 诊断失败: %s", e)
+            _safe_log(logging.ERROR, "诊断分析失败: %s", e)
             self._ai_bridge.ai_failed.emit(str(e))
         except Exception as e:  # noqa: BLE001
-            _safe_log(logging.ERROR, "AI 诊断异常: %s", e)
-            self._ai_bridge.ai_failed.emit(f"AI 诊断异常：{e}")
+            _safe_log(logging.ERROR, "诊断分析异常: %s", e)
+            self._ai_bridge.ai_failed.emit(f"诊断分析异常：{e}")
 
     def _on_ai_stage_started(self, no, name):
         self.pages.ai.set_stage(no, "running", "分析中…")
@@ -407,12 +441,16 @@ class MainWindow(QMainWindow):
         self.pages.ai.set_running(False)
         self.pages.ai.set_status("诊断完成 — 可查看采集计划 / 路试判断 / 维修报告")
         self._dev_status.setText("○ 就绪")
+        self.pages.diag.set_back_enabled(True)
+        self._set_phase("report")
+        self.pages.diag.scroll_to(self.pages.ai._report_card_ref())
 
     def _on_ai_failed(self, msg):
         self._ai_running = False
         self.pages.ai.set_running(False)
         self.pages.ai.show_error(msg)
         self._dev_status.setText("○ 就绪")
+        self.pages.diag.set_back_enabled(True)
 
 
 class _Pages:
