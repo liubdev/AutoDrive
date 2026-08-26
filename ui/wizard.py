@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
         self._stack = QStackedWidget()
 
         self.home = HomePage()
-        self.home.device_selected.connect(self._on_device_selected)
+        self.home.run_requested.connect(self._on_home_run)
 
         self.pages.diag = DiagnosticPage()
         # 保留别名，让既有调用点（wizard 内部 + 冒烟测试）零改动
@@ -241,11 +241,19 @@ class MainWindow(QMainWindow):
         self._set_phase("ai")
         self._start_run()
 
-    def _on_device_selected(self, vehicle: str):
-        """主页车型卡点击 → 进入分析页（记录车型 + 步进器就位 + 聚焦输入）"""
+    def _on_home_run(self):
+        """主页「DTS 诊断仪 · 运行」→ 进入分析页，预填常见问题（若有）"""
+        vehicle = self.home.selected_vehicle()
+        if not vehicle:
+            return
+        self._on_device_selected(vehicle, self.home.selected_faq())
+
+    def _on_device_selected(self, vehicle: str, faq: str = ""):
+        """进入分析页：记录车型 + 预填症状（常见问题）+ 步进器就位 + 聚焦输入"""
         self._vehicle = vehicle
         self.pages.diag.set_vehicle(vehicle)
-        self.pages.ai.set_summary(vehicle, "")
+        self.pages.ai.set_summary(vehicle, faq)
+        self.pages.ai._symptom_input.setText(faq)
         self._stack.setCurrentIndex(1)
         self._set_phase("run")
         QTimer.singleShot(0, self.pages.ai.focus_input)

@@ -139,6 +139,14 @@ QFrame#DevCard[sel="on"] QLabel#DevCardName { color: {acc}; }
 QLabel#DevCardSub { color: {dim}; font-size: 11px; }
 QFrame#DevCard[sel="on"] QLabel#DevCardSub { color: {acc}; }
 
+/* 主页：常见问题（ct1 快捷描述，点击选中） */
+QPushButton#FaqChip { background: {raise}; border: 1px solid {line}; border-radius: 6px; color: {mut}; font-size: 12px; padding: 6px 10px; }
+QPushButton#FaqChip:hover { background: {acc_soft}; border-color: {acc_line}; color: {acc}; }
+QPushButton#FaqChip[sel="on"] { background: {acc_soft}; border: 1px solid {acc}; color: {acc}; font-weight: 600; }
+
+/* 主页：DTS 诊断仪 · 运行卡 */
+QFrame#HomeRun { background: {cardbg}; border: 1px solid {cardline}; border-radius: {radius}; }
+
 /* 分析页顶部：面包屑（ct2：‹ 返回 / 车型 诊断） */
 QPushButton#CrumbBack { background: transparent; color: {mut}; border: none; padding: 3px 6px; font-size: 13px; }
 QPushButton#CrumbBack:hover { color: {acc}; }

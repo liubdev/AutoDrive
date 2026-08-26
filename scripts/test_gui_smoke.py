@@ -82,6 +82,19 @@ def main():
     ok("摘要条显示车型", w.pages.ai._summary_lbl.text().startswith("车型：轿车"),
        w.pages.ai._summary_lbl.text())
 
+    # 0b. 主页常见问题 + DTS 诊断仪运行
+    ok("主页常见问题 2×3", len(w.home._faq_btns) == 6
+       and all(b.objectName() == "FaqChip" for b in w.home._faq_btns))
+    ok("DTS 诊断仪运行按钮就绪", hasattr(w.home, "_run_btn")
+       and w.home._run_btn.text() == "运行" and w.home._run_btn.isEnabled())
+    w._on_back()
+    w.home._toggle_faq("动力不足")
+    ok("常见问题点击选中", w.home.selected_faq() == "动力不足")
+    w._on_home_run()
+    ok("运行 → 分析页且预填症状", w._stack.currentIndex() == 1
+       and w.pages.ai._symptom_input.text() == "动力不足",
+       w.pages.ai._symptom_input.text())
+
     # 1. set_report → 按钮可用 + 数据计数
     w._out_dir = tmp
     report = ReportLoader().load(tmp)

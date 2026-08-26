@@ -459,9 +459,12 @@ class DeviceCard(QFrame):
 
 
 class HomePage(QWidget):
-    """ct1 主页·设备选择：标题 + 四张车型卡（轿车/SUV/卡车/新能源）+ 底部免责声明。"""
+    """ct1 主页·设备选择：标题 + 四张车型卡 + 常见问题（2×3）+ DTS 诊断仪运行卡 + 免责声明。
 
-    device_selected = Signal(str)   # 车型 key: car/suv/truck/ev
+    车型卡仅选择；点「DTS 诊断仪 · 运行」才进入分析页（run_requested 通知主窗口）。
+    """
+
+    run_requested = Signal()   # 点「运行」→ 主窗口进入自动化 + AI 分析页
 
     VEHICLES = [
         ("car", "轿车", "家用代步 · 商务通勤"),
@@ -470,32 +473,40 @@ class HomePage(QWidget):
         ("ev", "新能源", "纯电 · 混动"),
     ]
 
+    FAQ = ("发动机抖动", "动力不足", "故障灯亮",
+           "启动困难", "油耗偏高", "行驶异响")
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("HomePage")
         self.setAttribute(Qt.WA_StyledBackground, True)
         self._selected = None
         self._cards = []
+        self._faq = ""
+        self._faq_btns = []
+        self._run_btn = None
         self._build_ui()
         self._select("car")   # 默认选中「轿车」（不触发导航）
+        self._sync_run_enabled()
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 48, 24, 24)
+        root.setContentsMargins(24, 40, 24, 24)
         root.setSpacing(8)
-        root.addStretch(2)
+        root.addStretch(1)
 
         title = QLabel("选择您使用的设备")
         title.setObjectName("HomeTitle")
         title.setAlignment(Qt.AlignCenter)
         root.addWidget(title)
 
-        sub = QLabel("点击车型卡片，进入自动化采集与 AI 诊断")
+        sub = QLabel("选择车型，常见问题可点击自动填入，再运行 DTS 诊断仪开始采集与诊断")
         sub.setObjectName("HomeSub")
         sub.setAlignment(Qt.AlignCenter)
         root.addWidget(sub)
-        root.addSpacing(30)
+        root.addSpacing(22)
 
+        # ── 车型卡（仅选择，不导航） ──
         row = QHBoxLayout()
         row.setSpacing(18)
         row.addStretch(1)
@@ -507,7 +518,50 @@ class HomePage(QWidget):
         row.addStretch(1)
         root.addLayout(row)
 
-        root.addStretch(3)
+        # ── 常见问题（ct1 2×3，点击选中/取消） ──
+        root.addSpacing(22)
+        root.addLayout(_section_header("常见问题", "点击自动填入"))
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        for i, q in enumerate(self.FAQ):
+            chip = QPushButton(q)
+            chip.setObjectName("FaqChip")
+            chip.setCursor(Qt.PointingHandCursor)
+            chip.clicked.connect(lambda _=False, text=q: self._toggle_faq(text))
+            self._faq_btns.append(chip)
+            grid.addWidget(chip, i // 3, i % 3)
+        root.addLayout(grid)
+
+        # ── DTS 诊断仪 · 运行（自动化流程入口） ──
+        root.addSpacing(18)
+        run_card = QFrame()
+        run_card.setObjectName("HomeRun")
+        rh = QHBoxLayout(run_card)
+        rh.setContentsMargins(16, 12, 16, 12)
+        rh.setSpacing(12)
+        icon = QLabel("DTS")
+        icon.setObjectName("DevIcon")
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setFixedSize(42, 42)
+        rh.addWidget(icon)
+        info = QVBoxLayout()
+        info.setSpacing(2)
+        nm = QLabel("DTS 诊断仪")
+        nm.setObjectName("CardTitle")
+        ds = QLabel("DTS650 数据流读取 · 故障码诊断 · 自动化采集")
+        ds.setObjectName("DtcDesc")
+        info.addWidget(nm)
+        info.addWidget(ds)
+        rh.addLayout(info)
+        rh.addStretch(1)
+        self._run_btn = QPushButton("运行")
+        self._run_btn.setObjectName("Primary")
+        self._run_btn.setCursor(Qt.PointingHandCursor)
+        self._run_btn.clicked.connect(self.run_requested.emit)
+        rh.addWidget(self._run_btn)
+        root.addWidget(run_card)
+
+        root.addStretch(2)
         foot = QLabel("AutoDiag AI 提供的建议仅供参考，重大故障请前往专业维修店检修")
         foot.setObjectName("HomeSub")
         foot.setAlignment(Qt.AlignCenter)
@@ -518,11 +572,21 @@ class HomePage(QWidget):
         for c in self._cards:
             c.set_selected(c.vehicle_key == key)
         self._selected = key
+        self._sync_run_enabled()
 
     def _on_card(self, key: str):
+        """车型卡点击：选中 + 启用运行；导航由「运行」按钮触发"""
         self._select(key)
-        label = dict((k, l) for k, l, _ in self.VEHICLES).get(key, "")
-        self.device_selected.emit(label)   # 发中文车型名（面包屑/摘要/AI 上下文共用）
+
+    def _sync_run_enabled(self):
+        if self._run_btn is not None:
+            self._run_btn.setEnabled(self._selected is not None)
+
+    def _toggle_faq(self, text: str):
+        """常见问题单选：再次点击取消"""
+        self._faq = "" if self._faq == text else text
+        for b in self._faq_btns:
+            _prop(b, "sel", "on" if b.text() == self._faq else "off")
 
     def selected_vehicle(self) -> str:
         """返回已选车型中文名；未选返回空串"""
@@ -530,6 +594,10 @@ class HomePage(QWidget):
             if key == self._selected:
                 return label
         return ""
+
+    def selected_faq(self) -> str:
+        """返回已选常见问题文本；未选返回空串"""
+        return self._faq
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1001,24 +1069,12 @@ class AiPage(QWidget):
         self._summary_bar_ref().setVisible(bool(parts))
 
     def _input_card(self) -> QFrame:
-        """ct2 输入条：FAQ 快捷描述（2×3）+ ✦ 单行输入 + 回形针 + 蓝色圆形发送"""
+        """ct2 输入条：✦ 单行输入 + 回形针 + 蓝色圆形发送（FAQ 快捷描述已上移主页）"""
         card = QFrame()
         card.setObjectName("AiCard")
         v = QVBoxLayout(card)
         v.setContentsMargins(16, 14, 16, 14)
         v.setSpacing(10)
-
-        # FAQ 快捷描述（2×3，点击自动填入输入框）
-        faq = QGridLayout()
-        faq.setSpacing(8)
-        for i, q in enumerate(("发动机抖动", "动力不足", "故障灯亮",
-                               "启动困难", "油耗偏高", "行驶异响")):
-            chip = QPushButton(q)
-            chip.setObjectName("FaqChip")
-            chip.setCursor(Qt.PointingHandCursor)
-            chip.clicked.connect(lambda _=False, text=q: self._apply_faq(text))
-            faq.addWidget(chip, i // 3, i % 3)
-        v.addLayout(faq)
 
         # 输入条：✦ + 单行输入 + 回形针 + 圆形发送
         bar = QHBoxLayout()

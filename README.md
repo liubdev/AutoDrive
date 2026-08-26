@@ -12,7 +12,7 @@ pip install pywinauto psutil opencv-python numpy pillow mss winsdk PySide6
 ## 使用
 
 ```bash
-# 桌面版 GUI：主页选车型 → 分析页（描述问题 → 采集 + AI 诊断 → 维修报告）
+# 桌面版 GUI：主页选车型/常见问题 → 运行 DTS 诊断仪 → 分析页（描述问题 → 采集 + AI 诊断 → 维修报告）
 # 采集完成自动结合故障码/数据流/知识库生成诊断方案，无需手动输入
 python autogui.py
 
