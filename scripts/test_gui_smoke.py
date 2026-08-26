@@ -90,10 +90,13 @@ def main():
     w._on_back()
     w.home._toggle_faq("动力不足")
     ok("常见问题点击选中", w.home.selected_faq() == "动力不足")
+    flow_calls = []
+    w._start_diag_flow = lambda: flow_calls.append("flow")   # 打桩：不真启自动化线程
     w._on_home_run()
     ok("运行 → 分析页且预填症状", w._stack.currentIndex() == 1
        and w.pages.ai._symptom_input.text() == "动力不足",
        w.pages.ai._symptom_input.text())
+    ok("运行直接启动自动化", flow_calls == ["flow"], flow_calls)
 
     # 1. set_report → 按钮可用 + 数据计数
     w._out_dir = tmp

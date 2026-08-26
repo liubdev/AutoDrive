@@ -242,11 +242,16 @@ class MainWindow(QMainWindow):
         self._start_run()
 
     def _on_home_run(self):
-        """主页「DTS 诊断仪 · 运行」→ 进入分析页，预填常见问题（若有）"""
+        """主页「DTS 诊断仪 · 运行」→ 进入分析页并直接启动自动化（采集 + AI）
+
+        症状取常见问题选中项（未选留空 → 采集完成后按故障码自动分析）。
+        """
         vehicle = self.home.selected_vehicle()
         if not vehicle:
             return
-        self._on_device_selected(vehicle, self.home.selected_faq())
+        symptom = self.home.selected_faq()
+        self._on_device_selected(vehicle, symptom)
+        self._start_diag_flow()
 
     def _on_device_selected(self, vehicle: str, faq: str = ""):
         """进入分析页：记录车型 + 预填症状（常见问题）+ 步进器就位 + 聚焦输入"""
