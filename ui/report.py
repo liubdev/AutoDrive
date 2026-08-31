@@ -11,8 +11,10 @@
 """
 
 import csv
+import json
 import logging
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -151,3 +153,104 @@ class ReportLoader:
         except Exception as e:
             log.warning("list files failed: %s", e)
         return files
+
+
+# ═══════════════════════════════════════════════════════════
+#  ReportMeta / ReportStore —— 报告列表（诊断报告页）
+# ═══════════════════════════════════════════════════════════
+
+from config.settings import settings  # noqa: E402 —— 仅用 reports_dir（非敏感字段）
+
+_REPORT_DIR_RE = re.compile(r"DTS_(\d{8})_(\d{6})")
+
+
+@dataclass
+class ReportMeta:
+    time: str               # "2026-08-25 16:28"
+    dev: str = "DTS"
+    summary: str = ""
+    out_dir: Path = None
+    dir_name: str = ""
+
+
+class ReportStore:
+    """扫描 settings.reports_dir 下 DTS_YYYYMMDD_HHMMSS 目录。
+
+    time 由目录名解析：DTS_20260825_162859 → "2026-08-25 16:28"。
+    summary 优先取 ai_report.json 的 overallConclusion，回退故障码首行。
+    """
+
+    def __init__(self, base: Path = None):
+        self.base = base or settings.reports_dir
+
+    def list_reports(self) -> list:
+        metas = []
+        if not self.base or not self.base.is_dir():
+            return metas
+        for d in sorted(self.base.iterdir()):
+            if not d.is_dir():
+                continue
+            m = _REPORT_DIR_RE.match(d.name)
+            if not m:
+                continue
+            date, t = m.group(1), m.group(2)
+            fmt = f"{date[:4]}-{date[4:6]}-{date[6:8]} {t[:2]}:{t[2:4]}"
+            metas.append(ReportMeta(time=fmt, out_dir=d, dir_name=d.name,
+                                    summary=self._summary(d)))
+        metas.sort(key=lambda r: r.time, reverse=True)
+        return metas
+
+    def _summary(self, out_dir: Path) -> str:
+        ai = out_dir / "ai_report.json"
+        try:
+            if ai.exists():
+                data = json.loads(ai.read_text(encoding="utf-8", errors="replace"))
+                s = (data.get("overallConclusion") or "").strip()
+                if s:
+                    return s
+        except Exception as e:
+            log.warning("read ai_report summary failed: %s", e)
+        fc = out_dir / "fault_codes.txt"
+        try:
+            if fc.exists():
+                lines = [l.strip() for l in fc.read_text(encoding="utf-8", errors="replace")
+                         .splitlines() if l.strip()]
+                if lines:
+                    return "；".join(lines[:2])
+        except Exception as e:
+            log.warning("read fault summary failed: %s", e)
+        return ""
+
+    def delete(self, meta) -> bool:
+        try:
+            if meta.out_dir and meta.out_dir.is_dir():
+                shutil.rmtree(meta.out_dir)
+                return True
+        except Exception as e:
+            log.warning("delete report failed: %s", e)
+        return False
+
+
+# ═══════════════════════════════════════════════════════════
+#  演示数据（无真机 / 无报告时降级填充）
+# ═══════════════════════════════════════════════════════════
+
+def build_demo_report() -> Report:
+    """从 ui.lcsdata 构造演示 Report（AI 诊断页降级用）。"""
+    from ui.lcsdata import DEMO_FAULTS, DEMO_VEHICLE
+    rep = Report(out_dir=None)
+    rep.version = "\n".join([
+        f"VIN: {DEMO_VEHICLE['vin']}",
+        f"车型: {DEMO_VEHICLE['model']}",
+        f"里程: {DEMO_VEHICLE['mileage']}",
+        f"ECU: {DEMO_VEHICLE['ecu']}",
+    ])
+    for f in DEMO_FAULTS:
+        rep.faults.append(FaultCode(code=f["code"], desc=f["desc"],
+                                    severity="crit" if f["status"] == "cur" else "warn"))
+    return rep
+
+
+def build_demo_ai_report() -> dict:
+    from ui.lcsdata import DEMO_AI_REPORT
+    return dict(DEMO_AI_REPORT)

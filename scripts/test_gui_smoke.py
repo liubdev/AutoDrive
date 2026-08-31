@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""GUI 冒烟：offscreen 平台实例化 MainWindow，走一遍 AI 页交互与信号链路。
+"""GUI 冒烟：offscreen 实例化 MainWindow，走一遍 LCS700 新 UI 导航 / 主题 / 演示降级 / 真实链路接线。
 
 用法: python scripts/test_gui_smoke.py
+目标断言 ≥ 55。
 """
-import json
+
 import os
 import sys
 import tempfile
@@ -12,7 +13,12 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
-from PySide6.QtWidgets import QScrollArea
+# 管道输出时 stdout 编码在启动时已定（Windows 默认 cp1252），此处强制 UTF-8
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -30,218 +36,303 @@ def ok(name, cond, detail=""):
         print(f"  ✗ {name}  {detail}")
 
 
-def _chip_texts(layout):
-    """收集 QHBoxLayout 内 Chip QLabel 文本"""
+def _frames(page, prop=None, oname=None):
+    """按动态属性 card / objectName 收集页面内 QFrame。"""
+    from PySide6.QtWidgets import QFrame
+
     out = []
-    for i in range(layout.count()):
-        w = layout.itemAt(i).widget()
-        if w is not None and getattr(w, "text", None):
-            out.append(w.text())
+    for f in page.findChildren(QFrame):
+        if prop and f.property("card") != prop:
+            continue
+        if oname and f.objectName() != oname:
+            continue
+        out.append(f)
     return out
 
 
-def _scroll_count(widget):
-    """统计 widget 子树内的 QScrollArea 数量"""
-    return len(widget.findChildren(QScrollArea))
-
-
 def main():
-    from PySide6.QtWidgets import QApplication, QLabel
-    from ui.report import ReportLoader
+    from PySide6.QtCore import QSettings
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import (
+        QApplication,
+        QFrame,
+        QLineEdit,
+        QPushButton,
+        QStackedWidget,
+    )
+
+    # 干净起始：清掉旧设备/主题残留，保证 d0/d1/d2 全在
+    QSettings("AutoDrive", "AutoDrive").clear()
+
+    from ui.report import ReportLoader, ReportStore
     from ui.wizard import MainWindow
-    from ui.pages import PhaseBar
-    from ai.chain import CollectionPlan, Locatability
+    from ui.widgets import PhaseBar
+    from ui.appshell import PAGE_ORDER, PAGE_SPECS
 
     # 夹具 out_dir
     tmp = Path(tempfile.mkdtemp(prefix="ai_gui_"))
     (tmp / "fault_codes.txt").write_text(
-        "P2135 节气门位置传感器电压相关性故障\n", encoding="utf-8")
+        "P2135 节气门位置传感器电压相关性故障\n", encoding="utf-8"
+    )
     (tmp / "DataFlow_List_1.txt").write_text(
-        "发动机转速\n共轨压力\n车速\n", encoding="utf-8")
-    (tmp / "DataFlow_1.csv").write_text(
-        "参数,值,单位,参考范围\n"
-        "发动机转速,750,r/min,650-850\n"
-        "共轨压力,320,bar,250-400\n", encoding="utf-8")
+        "发动机转速\n共轨压力\n车速\n", encoding="utf-8"
+    )
 
     app = QApplication([])
     w = MainWindow()
+    w.show()
+    QTest.qWait(30)
 
-    # 0. 双视图：启动即主页（设备选择），点击车型卡进入分析页
-    from PySide6.QtWidgets import QStackedWidget
-    ok("启动为双视图结构", isinstance(w._stack, QStackedWidget)
-       and w._stack.currentIndex() == 0)
-    ok("主页存在（设备选择）", hasattr(w, "home") and w.home._cards
-       and len(w.home._cards) == 4)
-    w._on_device_selected("轿车")
-    ok("点车型卡 → 分析页", w._stack.currentIndex() == 1
-       and w._vehicle == "轿车")
-    ok("面包屑显示车型", w.pages.diag._crumb_lbl.text() == "轿车 诊断",
-       w.pages.diag._crumb_lbl.text())
-    ok("进入即步进器①✓②●", [d.property("stepState") for (d, _l, _s) in w._phase_bar._dots]
-       == ["done", "current", "next", "next"])
-    ok("摘要条显示车型", w.pages.ai._summary_lbl.text().startswith("车型：轿车"),
-       w.pages.ai._summary_lbl.text())
+    home = w.home
+    ai = w.ai_diag
 
-    # 0b. 主页常见问题 + DTS 诊断仪运行
-    ok("主页常见问题 2×3", len(w.home._faq_btns) == 6
-       and all(b.objectName() == "FaqChip" for b in w.home._faq_btns))
-    ok("DTS 诊断仪运行按钮就绪", hasattr(w.home, "_run_btn")
-       and w.home._run_btn.text() == "运行" and w.home._run_btn.isEnabled())
-    w._on_back()
-    w.home._toggle_faq("动力不足")
-    ok("常见问题点击选中", w.home.selected_faq() == "动力不足")
-    flow_calls = []
-    w._start_diag_flow = lambda: flow_calls.append("flow")   # 打桩：不真启自动化线程
-    w._on_home_run()
-    ok("运行 → 分析页且预填症状", w._stack.currentIndex() == 1
-       and w.pages.ai._symptom_input.text() == "动力不足",
-       w.pages.ai._symptom_input.text())
-    ok("运行直接启动自动化", flow_calls == ["flow"], flow_calls)
+    # ── 1. 主题（深色默认 + 浅色切换持久化） ──
+    ok(
+        "主题默认深色",
+        w.theme.resolved == "dark" and w.home.property("ui/mode") == "dark",
+    )
+    w.theme.set_theme("light")
+    QTest.qWait(10)
+    ok(
+        "切浅色 → resolved light + 属性同步",
+        w.theme.resolved == "light" and w.home.property("ui/mode") == "light",
+    )
+    w.theme.set_theme("dark")
+    QTest.qWait(10)
+    ok("还原深色", w.theme.resolved == "dark" and w.home.property("ui/mode") == "dark")
 
-    # 1. set_report → 按钮可用 + 数据计数
+    # ── 2. 外壳与主页结构 ──
+    ok("启动即主页", w.shell.current_page() == "home")
+    ok("双视图结构（QStackedWidget）", isinstance(w._stack, QStackedWidget))
+    ok(
+        "核心 3 页预构建（其余懒加载）",
+        len(w.pages) == 3 and set(w.pages) == {"home", "ai-diagn", "settings"},
+        f"pages={sorted(w.pages)}",
+    )
+    ok(
+        "设备卡 3 台 + 1 添加",
+        len(home._dev_cards) == 3
+        and len(
+            [f for f in home.findChildren(QFrame) if f.property("card") == "dev-add"]
+        )
+        == 1,
+    )
+    ok(
+        "设备卡计数含添加卡",
+        len([f for f in home.findChildren(QFrame) if f.property("card") == "dev-add"])
+        == 1,
+    )
+    ok(
+        "AI 输入条存在",
+        isinstance(home._ai_text, QLineEdit) and home._ai_text.objectName() == "aiText",
+    )
+    ok("发送按钮存在", hasattr(home, "_send_btn"))
+    ok("常见故障类别 8 个", len(home._symp_cat_btns) == 8)
+    ok("常见故障项按钮 ≥ 2", len(home._symp_item_btns) >= 2)
+
+    # ── 3. 主页交互 ──
+    home.select_device("d0")
+    ok("选择设备 d0", home.selected_device_id() == "d0")
+    ok("selected_device 返回 dict", (home.selected_device() or {}).get("id") == "d0")
+    home._toggle_item("动力不足")
+    ok("选中故障现象", "动力不足" in home.selected_symptoms())
+    home._ai_text.setText("发动机亮故障灯")
+    ok("问题文本读取", home.question_text() == "发动机亮故障灯")
+    ok("has_input True（文本）", home.has_input())
+    home._ai_text.clear()
+    ok("has_input True（仅症状）", home.has_input())
+    home._toggle_item("动力不足")
+    ok("再点取消选择", "动力不足" not in home.selected_symptoms())
+
+    # ── 4. _on_start_ai 校验与分派 ──
+    home.select_device(None)
+    w._on_start_ai()
+    ok("未选设备 → 留在主页", w.shell.current_page() == "home" and not w._ai_running)
+    home.select_device("d0")
+    w._on_start_ai()  # 无输入 → 校验拦截
+    ok("无输入 → 拦截且不运行", w.shell.current_page() == "home" and not w._ai_running)
+    home._toggle_item("动力不足")
+
+    dts_called = []
+    w._start_dts_collection = lambda: dts_called.append(1)  # 打桩：不真启线程
+    w._on_start_ai()
+    ok(
+        "DTS 设备 → 走真实采集",
+        dts_called == [1] and w.shell.current_page() == "ai-diagn",
+        dts_called,
+    )
+    ok(
+        "面包屑 = 设备 诊断",
+        ai._crumb_text.text() == "您的设备1：DTS 诊断",
+        ai._crumb_text.text(),
+    )
+
+    # ── 5. 演示降级：X5 未接入自动化 → 演示数据 ──
+    w._start_dts_collection = None
+    w._on_restart()  # 回主页
+    ok(
+        "重新诊断 → 回主页",
+        w.shell.current_page() == "home" and ai._result_tag.isHidden(),
+    )
+    home.select_device("d1")
+    w._on_start_ai()  # 症状「动力不足」仍选中
+    ok(
+        "X5 → 进入 ai-diagn 演示降级",
+        w.shell.current_page() == "ai-diagn" and w._ai_running,
+    )
+    QTest.qWait(3600)  # DYN_MSGS 6 条 × 450ms + 收尾
+    ok("报告卡可见", ai._result_card.isVisible() and not ai._result_tag.isHidden())
+    texts = ai._report_texts()
+    ok("报告含「氧传感器」", "氧传感器" in texts)
+    ok("原因条渲染", "催化转化器" in texts and "油箱盖" in texts, texts)
+    ok("动态信息 6 条", ai._dyn_list.count() == 6, ai._dyn_list.count())
+    ok("车辆信息故障码 3 条", ai._veh_dtc_list.count() == 3, ai._veh_dtc_list.count())
+    ok(
+        "VIN 填充",
+        ai._veh_vals["vin"].text() == "LSVAM4187C2123456",
+        ai._veh_vals["vin"].text(),
+    )
+    ok("排查步骤 5 步", len(ai._steps) == 5, len(ai._steps))
+    ok("步骤翻页器 1 / 5", ai._step_pager.text() == "1 / 5", ai._step_pager.text())
+    ok(
+        "步进器 report 阶段",
+        ai._steps_bar._dots[3][0].property("stepState") == "current",
+    )
+    ok("完成 → 状态就绪", w._dev_status.text() == "○ 就绪" and not w._ai_running)
+    ok(
+        "完成 → 按钮恢复可用",
+        ai._export_btn.isEnabled() and ai._restart_btn.isEnabled(),
+    )
+
+    # ── 6. 导出 AI 报告（写夹具目录，不污染 reports_dir） ──
+    from ui.lcsdata import DEMO_AI_REPORT
+
     w._out_dir = tmp
-    report = ReportLoader().load(tmp)
-    w.pages.ai.set_report(report)
-    ok("报告加载后发送按钮可用", w.pages.ai._run_btn.isEnabled())
-    ok("数据计数显示", "1 条故障码" in w.pages.ai._sum_lbl.text(), w.pages.ai._sum_lbl.text())
+    w._export_ai_report(DEMO_AI_REPORT)
+    md = tmp / "ai_report.md"
+    ok(
+        "导出 Markdown 成功",
+        md.exists() and "氧传感器" in md.read_text(encoding="utf-8"),
+    )
 
-    # 2. 输入 + reset + 运行态
-    w.pages.ai._symptom_input.setText("动力不足，爬坡无力")
-    w.pages.ai._notes_input.setText("已换过空滤")
-    sym, notes = w.pages.ai.get_input()
-    ok("输入读取", sym == "动力不足，爬坡无力" and notes == "已换过空滤")
-    w.pages.ai.reset()
-    w.pages.ai.set_running(True)
-    ok("运行态按钮禁用", not w.pages.ai._run_btn.isEnabled())
-    ok("运行态文案", w.pages.ai._status_lbl.text() == "诊断中…",
-       w.pages.ai._status_lbl.text())
+    # ── 7. 全页导航 + 底栏按钮与 PAGE_SPECS 一致 ──
+    nav_bad = []
+    for pid in PAGE_ORDER:
+        w.shell.goPage(pid)
+        app.processEvents()
+        if w.shell.current_page() != pid:
+            nav_bad.append(pid)
+    ok("遍历 19 页 goPage 无异常", not nav_bad, nav_bad)
+    ok(
+        "懒加载全部建成 19 页",
+        len(w.pages) == 19 and w.shell.stack.count() == 19,
+        f"pages={len(w.pages)} stack={w.shell.stack.count()}",
+    )
+    bb_bad = []
+    for pid in PAGE_ORDER:
+        w.shell.goPage(pid)
+        bb = [b for b in w.shell.findChildren(QPushButton) if b.objectName() == "bbBtn"]
+        if len(bb) != len(PAGE_SPECS[pid].btns):
+            bb_bad.append((pid, len(bb), len(PAGE_SPECS[pid].btns)))
+    ok("每页底栏按钮数与 PAGE_SPECS 一致", not bb_bad, bb_bad)
 
-    # 3. 三阶段事件驱动（模拟 wizard 信号处理器）
-    plan = CollectionPlan(
-        streams=["发动机转速", "共轨压力", "车速"],
-        working_conditions="原地挂空挡，怠速后急加速")
-    w._on_ai_stage_done(1, "确认采集列表", plan)
-    ok("阶段1 done + 采集计划卡可见", not w.pages.ai._plan_card_ref().isHidden()
-       and w.pages.ai._plan_chips.count() >= 3)
+    # ── 8. 骨架占位页计数 ──
+    w.shell.goPage("special")
+    ok("专用诊断仪 grid5 == 10", len(_frames(w.pages["special"], prop="grid5")) == 10)
+    w.shell.goPage("advanced")
+    ok("高级功能 grid4 == 4", len(_frames(w.pages["advanced"], prop="grid4")) == 4)
+    w.shell.goPage("ebs-dtc")
+    ok("EBS 故障码行 == 10", len(_frames(w.pages["ebs-dtc"], oname="ecRow")) == 10)
+    w.shell.goPage("can")
+    ok("CAN 扫描行 == 6", len(_frames(w.pages["can"], oname="listRow")) == 6)
+    w.shell.goPage("ebs")
+    ok("EBS 电控系统行 == 7", len(_frames(w.pages["ebs"], oname="listRow")) == 7)
 
-    loc = Locatability(is_locatable=True, reason="转速与轨压数据完整，可原地定位")
-    w._on_ai_stage_done(2, "是否需要路试", loc)
-    ok("阶段2 done + 路试徽标", w.pages.ai._loc_verdict.text() == "可原地定位 · 无需路试")
+    # ── 9. 报告页：真实 ReportStore 扫描 / 演示种子回退 ──
+    store = ReportStore()
+    metas = store.list_reports()
+    ok("ReportStore 扫描返回列表", isinstance(metas, list))
+    w.shell.goPage("report")
+    tag = w.pages["report"]._count_tag.text()
+    ok("报告计数标签", bool(tag) and "份报告" in tag, tag)
+    ok(
+        "报告列表有行（真实或演示）",
+        w.pages["report"]._list.count() >= 2,
+        w.pages["report"]._list.count(),
+    )
 
-    report_data = {
-        "overallConclusion": "发动机的大脑（ECU）在报警，怀疑燃油计量单元的神经（线束）接触不良。",
-        "diagnosisList": [{
-            "faultPoint": "燃油计量单元(IMV)",
-            "probability": "可能性最大",
-            "simpleExplanation": "故障码 P2135 + 共轨压力波动，指向计量单元",
-            "guideSteps": ["第一步，拔下 IMV 插头，<b>测量 1 号针脚</b>对地电压。<br>正常应为 5V。",
-                           "第二步，测信号线与 ECU 侧 A23 针脚通断。"],
-        }],
-    }
-    w._on_ai_stage_done(3, "输出维修报告", report_data)
-    ok("阶段3 done + 报告卡可见", not w.pages.ai._report_card_ref().isHidden())
-    ok("报告 widget 渲染", "燃油计量单元" in w.pages.ai._report_texts())
-    ok("报告后出现操作按钮", not w.pages.ai._action_card_ref().isHidden()
-       and w.pages.ai._export_btn.text() == "导出诊断报告")
-    w._on_ai_finished({"plan": None, "locatability": None,
-                       "report": report_data, "out_dir": str(tmp)})
-    ok("步进器 report 阶段", [d.property("stepState") for (d, _l, _s) in w._phase_bar._dots]
-       == ["done", "done", "done", "current"])
-    ok("结束按钮恢复", w.pages.ai._run_btn.isEnabled()
-       and w.pages.ai._status_lbl.text() == "诊断完成 — 可查看采集计划 / 路试判断 / 维修报告",
-       w.pages.ai._status_lbl.text())
+    # ── 10. 设置页主题 seg 高亮 + 信号接线 ──
+    w.shell.goPage("settings")
+    sett = w.pages["settings"]
+    ok("设置项 11 条", len(_frames(sett, prop="set-row")) == 11)
+    sett.set_current_theme("light")
+    seg = dict(sett._theme_btns)
+    ok(
+        "切浅色 → seg 高亮同步",
+        seg["light"].property("sel") == "on" and seg["dark"].property("sel") == "off",
+    )
+    sett._pick_theme("dark")  # 走真实信号 → wizard → ThemeManager
+    QTest.qWait(10)
+    ok("主题信号接线生效", w.theme.resolved == "dark")
 
-    # 4. 错误路径
-    w._on_ai_failed("未配置 DeepSeek API Key")
-    ok("失败文案 + 可重试", "失败" in w.pages.ai._status_lbl.text()
-       and w.pages.ai._run_btn.isEnabled(), w.pages.ai._status_lbl.text())
-
-    # 5. load_from：模拟重跑后从 out_dir 恢复
-    w.pages.ai.reset()
-    (tmp / "ai_collection_plan.json").write_text(
-        json.dumps({"streams": ["车速"], "working_conditions": "路试"}, ensure_ascii=False),
-        encoding="utf-8")
-    w.pages.ai.load_from(tmp)
-    ok("load_from 恢复采集计划", not w.pages.ai._plan_card_ref().isHidden())
-
-    # 6. set_report(None) → 回到等待态（发送按钮始终可用：发送即采集+AI）
-    w.pages.ai.set_report(None)
-    ok("无报告回到等待态", w.pages.ai._run_btn.isEnabled()
-       and w.pages.ai._sum_lbl.text() == "等待运行数据",
-       w.pages.ai._sum_lbl.text())
-
-    # 6b. 面包屑返回主页（未运行时）
-    w._on_back()
-    ok("返回主页", w._stack.currentIndex() == 0)
-    w._on_device_selected("SUV")
-    ok("再次进入分析页（SUV）", w._stack.currentIndex() == 1
-       and w.pages.diag._crumb_lbl.text() == "SUV 诊断")
-
-    # 7. 单页连续流：节可见性 / 摘要 chips / 展开收起
-    diag = w.pages.diag
-    ok("单页初始②③节隐藏", diag._data_section.isHidden() and diag.ai.isHidden())
-    diag.set_report(report)
-    ok("set_report 后②③节可见", not diag._data_section.isHidden()
-       and not diag.ai.isHidden())
-    chips = _chip_texts(diag._sum_chips)
-    ok("摘要 chips 含计数", "1 条故障码" in chips and "2 项数据流" in chips, chips)
-
-    diag.data.setVisible(False)          # 保证起点是收起态
-    diag._toggle_btn.click()
-    ok("展开明细后 detail 可见", not diag.data.isHidden())
-    diag._toggle_btn.click()
-    ok("收起明细后 detail 隐藏", diag.data.isHidden())
-    ok("展开按钮文案复位", diag._toggle_btn.text() == "▸ 展开明细")
-
-    # 8. PhaseBar 四节点（ct2，纯展示，不可点击）
+    # ── 11. PhaseBar 四阶段（独立控件） ──
     pb = PhaseBar()
     pb.set_phase("run")
-    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
-    ok("PhaseBar run 阶段", st == ["done", "current", "next", "next"], st)
+    ok(
+        "PhaseBar run",
+        [d.property("stepState") for (d, _l, _s) in pb._dots]
+        == ["done", "current", "next", "next"],
+    )
     pb.set_phase("data")
-    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
-    ok("PhaseBar data 阶段", st == ["done", "done", "current", "next"], st)
+    ok(
+        "PhaseBar data",
+        [d.property("stepState") for (d, _l, _s) in pb._dots]
+        == ["done", "done", "current", "next"],
+    )
     pb.set_phase("ai")
-    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
-    ok("PhaseBar ai 阶段", st == ["done", "done", "current", "next"], st)
+    ok(
+        "PhaseBar ai",
+        [d.property("stepState") for (d, _l, _s) in pb._dots]
+        == ["done", "done", "current", "next"],
+    )
     pb.set_phase("report")
-    st = [d.property("stepState") for (d, _l, _s) in pb._dots]
-    ok("PhaseBar report 阶段", st == ["done", "done", "done", "current"], st)
+    ok(
+        "PhaseBar report",
+        [d.property("stepState") for (d, _l, _s) in pb._dots]
+        == ["done", "done", "done", "current"],
+    )
 
-    # 9. embed 模式：无内滚 / 无空态 / 无页面级返回按钮
-    ok("RunPage embed 无内滚", _scroll_count(diag.run) == 0)
-    ok("DataPage embed 无内滚", _scroll_count(diag.data) == 0)
-    ok("AiPage embed 无内滚", _scroll_count(diag.ai) == 0)
-    ok("DataPage embed 无空态", not hasattr(diag.data, "_empty"))
-    ok("RunPage embed 无底部返回", diag.run._back_btn is None)
-
-    # 10. DataPage 重复 set_report 不叠加渲染
-    n = diag.data._stack_layout.count()
-    diag.data.set_report(report)
-    ok("重复 set_report 不叠加", diag.data._stack_layout.count() == n,
-       f"{n} -> {diag.data._stack_layout.count()}")
-
-    # 11. reset_all 收起②③、复位展开按钮
-    diag.reset_all()
-    ok("reset_all 收起②③", diag._data_section.isHidden() and diag.ai.isHidden()
-       and diag._toggle_btn.text() == "▸ 展开明细")
-
-    # 12. 采集完成 → 自动触发 AI（未配置 key 时软跳过，不打断收尾）
+    # ── 12. 采集完成 → 自动 AI（未配置 key 软跳过，不打断收尾） ──
     import ai.deepseek as _ds
+
     w._out_dir = tmp
-    w._on_flow_done(None)               # 有故障码 → pending 置位、PhaseBar→③AI分析中
-    ok("流程完成 pending 自动 AI", w._pending_auto_ai is True
-       and w._phase_bar._dots[2][0].property("stepState") == "current")
+    w._on_flow_done(None)
+    ok(
+        "流程完成 pending 自动 AI",
+        w._pending_auto_ai is True
+        and w.ai_diag._steps_bar._dots[2][0].property("stepState") == "current",
+    )
     _saved_cfg = _ds.DeepSeekClient.configured
     _ds.DeepSeekClient.configured = property(lambda self: False)
     try:
         w._on_run_finished()
     finally:
         _ds.DeepSeekClient.configured = _saved_cfg
-    ok("未配置 key 软跳过自动 AI", w._ai_running is False
-       and "跳过" in w.pages.ai._status_lbl.text(), w.pages.ai._status_lbl.text())
-    ok("软跳过后复位就绪", w._pending_auto_ai is False
-       and w._dev_status.text() == "○ 就绪")
+    ok(
+        "未配置 key 软跳过自动 AI",
+        w._ai_running is False and "跳过" in ai._status_lbl.text(),
+        ai._status_lbl.text(),
+    )
+    ok(
+        "软跳过后复位就绪",
+        w._pending_auto_ai is False and w._dev_status.text() == "○ 就绪",
+    )
+
+    # ── 13. ReportLoader 真实夹具解析（版本 / 故障码 / 数据流） ──
+    report = ReportLoader().load(tmp)
+    ok("夹具故障码解析", len(report.faults) == 1 and report.faults[0].code == "P2135")
+    ok("夹具数据流解析", len(report.flows) >= 3, len(report.flows))
+    ok("has_data 判定", report.has_data is True)
 
     print(f"\n══ GUI PASS {PASS} / FAIL {FAIL} ══")
     sys.exit(1 if FAIL else 0)

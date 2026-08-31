@@ -1,8 +1,12 @@
 """AutoDrive 桌面端 UI 包。
 
-分层：
-  ui/theme.py   主题系统（浅色恒定 + 强调色，QSS 构建）
-  ui/report.py  输出目录解析 → 故障码 / 数据流 / 文件
-  ui/pages.py   主页设备选择（ct1：车型 + 常见问题 + DTS 运行）+ 分析页（ct2 单页诊断流 + 四节点步进器）
-  ui/wizard.py  主窗口（共享顶栏 + 双视图导航 + 引擎 / AI 桥接）
+分层（LCS700 诊断平台外壳，替换旧 ct1/ct2 双视图）：
+  ui/theme.py       主题系统（深色默认 + 浅色切换，QSettings ui/mode 持久化，QSS 令牌）
+  ui/theme_qss.py   LCS 版 QSS 模板（双主题共用 {token} 占位，按页分段）
+  ui/lcsdata.py     演示数据常量（源自 docs/RunchTech_V01.html 的 JS 数据）
+  ui/widgets.py     QPainter 控件：SvgGlyph / RunchLogo / PhaseBar / GradBar / Toast 等
+  ui/appshell.py    应用外壳：顶栏 + QStackedWidget（PAGE_ORDER 19 页）+ 底栏 + Toast/模态
+  ui/report.py      输出目录解析（故障码/数据流/文件）+ ReportStore 报告列表
+  ui/pages/         页面包（home / ai_diag / report / settings / account / remote* / special*）
+  ui/wizard.py      主窗口：构建 19 页 + AppShell 导航 + DTS 引擎 / AI 三阶段桥接
 """

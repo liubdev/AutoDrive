@@ -33,7 +33,7 @@ class Settings:
     ai_temperature: float = 0.2
     ai_max_tokens: int = 4000
     ai_timeout: int = 120
-    api_key: Optional[str] = "sk-92228c27e1164fa1a5f3e37e2dae07ea"      # None → 回退环境变量 DEEPSEEK_API_KEY
+    api_key: Optional[str] = "sk-e3643a2956604e50be4ade6ef4bf8f5c"      # None → 回退环境变量 DEEPSEEK_API_KEY
     api_base: Optional[str] = "https://api.deepseek.com"
 
     # --- Logging ---

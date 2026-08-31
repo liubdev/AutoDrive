@@ -20,6 +20,21 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 
+def _matplotlib_status() -> str:
+    """探测 matplotlib 是否可用（Nuitka 的 matplotlib 插件会编译期探测，装了但坏会 FATAL）。
+
+    返回 "ok" / "broken" / "absent"。AutoDrive 从不 import matplotlib，
+    脚本用 --nofollow-import-to=matplotlib 跳过它；此处仅提前给出可读提示。
+    """
+    try:
+        import matplotlib  # noqa: F401
+        return "ok"
+    except ImportError as e:
+        return "broken" if "requires" in str(e) else "absent"
+    except Exception:
+        return "broken"
+
+
 def _have_msvc() -> bool:
     """用 vswhere 探测 VS/Build Tools 是否含 MSVC x64 工具链"""
     pf = os.environ.get("ProgramFiles(x86)")
@@ -58,10 +73,19 @@ def main():
         print("    安装地址: https://visualstudio.microsoft.com/visual-cpp-build-tools/")
         print("    安装时勾选「使用 C++ 的桌面开发」，然后重试本脚本。")
 
+    # 2.5) matplotlib 前置检查（Nuitka 插件会探测它，装了但坏会 FATAL）
+    mpl = _matplotlib_status()
+    if mpl == "broken":
+        print("  ! 检测到 matplotlib 已安装但损坏（依赖过旧）——Nuitka 会因此 FATAL。")
+        print("    已用 --nofollow-import-to=matplotlib 跳过它；建议修复环境：")
+        print("      pip install -U python-dateutil   # 或：pip uninstall -y matplotlib")
+
     cmd = [
         sys.executable, "-m", "nuitka",
         "--onefile",                     # 单文件 EXE
         "--windows-console-mode=disable",  # 无控制台窗口
+        # 自动下载 Dependency Walker（Windows standalone/onefile 必需，非交互构建无法提示）
+        "--assume-yes-for-downloads",
         "--enable-plugin=pyside6",
         "--output-dir=dist",             # 输出 dist/AutoDrive.exe（与旧版一致）
         "--output-filename=AutoDrive.exe",
@@ -77,11 +101,16 @@ def main():
         "--include-package=psutil",
         "--include-package=cv2",
         "--include-package=numpy",
+        # 本产品不用 matplotlib，显式不跟踪：环境里「装了但坏的 matplotlib」会导致
+        # Nuitka 插件探测 FATAL（如 dateutil 过老），nofollow 后插件不再编译它。
+        "--nofollow-import-to=matplotlib",
         # 数据目录（模板 + 知识库 + 配置 + 流程/视觉素材）
         "--include-data-dir=automation=automation",
         "--include-data-dir=vision=vision",
         "--include-data-dir=config=config",
         "--include-data-dir=ai=ai",
+        # QSS 外部化后必须带上模板文件：theme_qss.py import 时读 ui/theme.qss，缺失则启动崩
+        "--include-data-file=ui/theme.qss=ui/theme.qss",
         str(ROOT / "autogui.py"),
     ]
 

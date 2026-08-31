@@ -12,7 +12,7 @@ pip install pywinauto psutil opencv-python numpy pillow mss winsdk PySide6
 ## 使用
 
 ```bash
-# 桌面版 GUI：主页选车型/常见问题 → 运行 DTS 诊断仪 → 分析页（描述问题 → 采集 + AI 诊断 → 维修报告）
+# 桌面版 GUI：主页选设备/常见故障 → 开始AI智能诊断 → 采集 + AI 三阶段 → 维修报告
 # 采集完成自动结合故障码/数据流/知识库生成诊断方案，无需手动输入
 python autogui.py
 
@@ -32,19 +32,24 @@ AutoDrive/
 │   │   └── dts.py       DTS 诊断仪自动化
 │   ├── flow/            流程引擎（FlowStep + FlowEngine，事件/取消）
 │   └── flows/           可配置流程定义（dts_flow.py）
-├── ui/                  桌面端 UI（PySide6）
-│   ├── logo.py          品牌 Logo：仪表盘造型
-│   ├── theme.py         主题：固定浅色 × 强调色（科技蓝 azure），QSS 令牌渲染
-│   ├── report.py        输出目录解析（故障码/数据流/文件）
-│   ├── pages.py         主页设备选择（ct1）+ 分析页（ct2 单页诊断流 + 进度指示）
-│   └── wizard.py        主窗口：双视图（主页 → 分析页）+ 引擎/ AI 桥接
+├── ui/                  桌面端 UI（PySide6，LCS700 诊断平台外壳）
+│   ├── appshell.py      应用外壳：顶栏 + QStackedWidget（19 页）+ 底栏 + Toast/模态
+│   ├── theme.py         主题系统：深色默认 + 浅色切换（QSettings ui/mode 持久化）
+│   ├── theme_qss.py     LCS 版 QSS 令牌模板（双主题共用，按页分段）
+│   ├── lcsdata.py       演示数据常量（设备/症状/骨架页/演示报告，源自 RunchTech_V01.html）
+│   ├── widgets.py       QPainter 控件：SvgGlyph / RunchLogo / PhaseBar / GradBar / Toast…
+│   ├── report.py        输出目录解析（故障码/数据流/文件）+ ReportStore 报告列表
+│   ├── pages/           页面包（19 页：home / ai_diag / report / settings / account /
+│   │                    remote* / special* / update，骨架页复用 SkeletonPage 基类）
+│   └── wizard.py        主窗口：构建页面 + AppShell + DTS 引擎 / AI 三阶段桥接
 ├── vision/              视觉识别
 │   ├── ocr.py           Windows 内置 OCR（无需安装）
 │   ├── locate.py        图片模板匹配（跨分辨率）
 │   └── screenshot.py    截图
 ├── config/settings.py   全局配置
-├── scripts/             控制台运行器
-├── autogui.py           PySide6 桌面版入口（单页诊断流，文件日志）
+├── scripts/             控制台运行器 + GUI 冒烟测试
+├── docs/                设计源（RunchTech_V01.html）
+├── autogui.py           PySide6 桌面版入口（LCS700 外壳，文件日志）
 ├── main.py              入口
 └── build_exe.py         Nuitka onefile 打包
 ```
