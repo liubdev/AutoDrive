@@ -8,8 +8,9 @@ QMainWindow#AppWindow, QWidget#AppShell { background: {board}; }
 /* ── 顶部栏 ─────────────────────────────── */
 QFrame#TBar { background: {topbar}; border: none; border-bottom: 1px solid {line}; }
 QWidget#RunchLogo { }
-QPushButton#BrandBtn { background: transparent; border: none; border-radius: 10px; padding: 2px 6px; }
-QPushButton#BrandBtn:hover { background: {glass}; }
+/* 顶/底栏可点容器用 QFrame（ClickFrame）：QPushButton sizeHint 忽略内部布局，logo/文字会压塌重叠 */
+QFrame#BrandBtn { background: transparent; border: none; border-radius: 10px; padding: 2px 6px; }
+QFrame#BrandBtn:hover { background: {glass}; }
 QLabel#BrandCn { color: {tx}; font-size: 16px; font-weight: 800; letter-spacing: 1px; }
 QLabel#BrandEn { color: {dim}; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
 QLabel#PageTitlePill { background: {glass}; color: {mut}; border: 1px solid {line};
@@ -23,8 +24,8 @@ QPushButton#ExitBtn:hover { color: {crit}; background: {crit_soft}; border-color
 
 /* ── 底部栏 ─────────────────────────────── */
 QFrame#BBar { background: {bottomb}; border: none; border-top: 1px solid {line}; }
-QPushButton#AccountBtn { background: transparent; border: none; border-radius: 10px; padding: 4px 10px; }
-QPushButton#AccountBtn:hover { background: {glass}; }
+QFrame#AccountBtn { background: transparent; border: none; border-radius: 10px; padding: 4px 10px; }
+QFrame#AccountBtn:hover { background: {glass}; }
 QLabel#AvatarLabel { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {ok_grad0}, stop:1 {ok_grad1});
   color: #FFFFFF; border-radius: 9px; font-size: 11px; font-weight: 800; }
 QLabel#AccountName { color: {mut}; font-size: 13px; font-weight: 600; }
@@ -146,6 +147,16 @@ QLabel#devName { color: {tx}; font-size: 15px; font-weight: 700; }
 QFrame[card="dev"][sel="on"] QLabel#devName { color: {acc}; }
 QLabel#devSys { color: {mut}; font-size: 12px; }
 QLabel#devObd { color: {dim}; font-size: 11px; }
+
+/* 彩色图标小方块（对齐设计稿 .dev-card .pic / .quick-tile .ic）：
+   底色语义软底 + 图标描边用对应 *_hi 令牌；尺寸 sz=36（设备卡）/32（快捷宫格）。 */
+QFrame#IconBox { border-radius: 10px; }
+QFrame#IconBox[sz="36"] { min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px; }
+QFrame#IconBox[sz="32"] { min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px; }
+QFrame#IconBox[ic="acc"] { background: {acc_soft}; }
+QFrame#IconBox[ic="warn"] { background: {warn_soft}; }
+QFrame#IconBox[ic="ok"] { background: {ok_soft}; }
+QFrame#IconBox[ic="purple"] { background: {purple_soft}; }
 QPushButton#devDel { background: transparent; color: {dim}; border: none; border-radius: 11px;
   font-size: 13px; min-width: 22px; max-width: 22px; min-height: 22px; max-height: 22px; }
 QPushButton#devDel:hover { color: {crit}; background: {crit_soft}; }
@@ -153,17 +164,24 @@ QFrame[card="dev-add"] { background: transparent; border: 1.5px dashed {line}; b
 QFrame[card="dev-add"]:hover { border-color: {acc}; }
 QLabel#devAddLabel { color: {dim}; font-size: 12px; font-weight: 600; }
 QLabel#devAddPlus { color: {dim}; font-size: 26px; }
-QPushButton#iconPick { background: transparent; border: 1px solid {line}; border-radius: 8px;
+QFrame#iconPick { background: transparent; border: 1px solid {line}; border-radius: 8px;
   min-width: 46px; max-width: 46px; min-height: 46px; max-height: 46px; }
-QPushButton#iconPick:hover { border-color: {acc_line}; }
-QPushButton#iconPick[sel="on"] { border: 2px solid {acc}; }
+QFrame#iconPick:hover { border-color: {acc_line}; }
+QFrame#iconPick[sel="on"] { border: 2px solid {acc}; }
 
-/* 常见故障现象：两级（对齐设计稿 .symp-cats / .symp-items 胶囊多选） */
-QPushButton[role="symp-cat"] { background: {panel}; color: {mut}; border: 1px solid {line};
-  border-radius: 20px; padding: 8px 16px; font-size: 13px; font-weight: 600; }
-QPushButton[role="symp-cat"]:hover { border-color: {acc_line}; color: {acc}; }
-QPushButton[role="symp-cat"][sel="on"] { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-  stop:0 {acc_grad0}, stop:1 {acc_grad1}); border-color: transparent; color: {acc_ink}; }
+/* 常见故障现象：两级（对齐设计稿 .symp-cats / .symp-items 胶囊多选）。
+   两点 Qt 限制：QPushButton 的 QSS background 不按 border-radius 裁剪（故用 QFrame）；
+   radius > 控件半高时整块回退矩形（胶囊高≈31，半高 15.5，radius 13 留安全裕量）。 */
+QFrame[role="symp-cat"] { background: {panel}; border: 1px solid {line}; border-radius: 13px;
+  padding: 8px 16px; }
+QFrame[role="symp-cat"]:hover { border-color: {acc_line}; }
+QFrame[role="symp-cat"][sel="on"] { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+  stop:0 {acc_grad0}, stop:1 {acc_grad1}); border-color: transparent; }
+QLabel#sympCatText { color: {mut}; font-size: 13px; font-weight: 600; }
+/* 注意：后代选择器配祖先 :hover 在本 Qt 构建下恒命中（quickName/sympCatText 曾全变强调蓝）。
+   hover 文字色改用对 label 自身的直接 :hover（label 铺满胶囊内部，悬停胶囊即悬停 label）。 */
+QLabel#sympCatText:hover { color: {acc_hi}; }
+QFrame[role="symp-cat"][sel="on"] QLabel#sympCatText { color: {acc_ink}; }
 QFrame[symp="item"] { background: {panel}; border: 1px solid {line}; border-radius: 10px;
   padding: 9px 14px; }
 QFrame[symp="item"]:hover { border-color: {acc_line}; }
@@ -191,7 +209,7 @@ QFrame[card="quick"] { background: {panel}; border: 1px solid {line}; border-rad
 QFrame[card="quick"]:hover { border-color: {acc_line}; background: {acc_soft}; }
 QLabel#quickName { color: {tx}; font-size: 13px; font-weight: 600; }
 QLabel#quickSub { color: {dim}; font-size: 10.5px; }
-QFrame[card="quick"]:hover QLabel#quickName { color: {acc}; }
+/* 设计稿 hover 只变边框/底，名色不变；不要用 :hover 后代选择器（本 Qt 构建恒命中） */
 
 
 /* ── AI 智能诊断页 ───────────────────────── */

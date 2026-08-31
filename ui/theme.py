@@ -36,7 +36,7 @@ def render_qss(template: str, tokens: dict) -> str:
 LIGHT = {
     "board": "#f3f5f9", "surface": "#f3f5f9", "panel": "#ffffff", "raise": "#ffffff",
     "line": "#dde1e8", "tx": "#1f2937", "mut": "#4b5563", "dim": "#6b7280",
-    "ok": "#16a34a", "warn": "#ea580c", "crit": "#dc2626",
+    "ok": "#16a34a", "warn": "#ea580c", "crit": "#dc2626", "purple": "#7c3aed",
     "acc": "#2563eb", "acc_hi": "#1d4ed8",
     "cyan": "#2563eb", "cyan_soft": "#2563eb",
     "topbar": "#fbfcfd", "bottomb": "#fbfcfd",
@@ -46,7 +46,7 @@ LIGHT = {
 DARK = {
     "board": "#0b0e14", "surface": "#0e131c", "panel": "#141a24", "raise": "#1e242e",
     "line": "#232a34", "tx": "#e5e7eb", "mut": "#9ca3af", "dim": "#6b7280",
-    "ok": "#34d399", "warn": "#fb923c", "crit": "#f87171",
+    "ok": "#34d399", "warn": "#fb923c", "crit": "#f87171", "purple": "#c4b5fd",
     "acc": "#38bdf8", "acc_hi": "#7dd3fc",
     "cyan": "#22d3ee", "cyan_soft": "#7dd3fc",
     "topbar": "#12151c", "bottomb": "#12151c",
@@ -120,6 +120,11 @@ def build_tokens(resolved: str, accent: str) -> dict:
     base["warn_line"] = _mix(base["warn"], base["line"], 0.5)
     base["crit_soft"] = _mix(base["crit"], base["panel"], 0.92)
     base["crit_line"] = _mix(base["crit"], base["line"], 0.5)
+    base["purple_soft"] = _mix(base["purple"], base["panel"], 0.86)
+    # 彩色图标盒的高亮描边：深色向白调亮、浅色向黑压深（对齐设计稿 .ic 色板）
+    base["ok_hi"] = _mix(base["ok"], "#FFFFFF", 0.18) if resolved == "dark" else _mix(base["ok"], "#000000", 0.12)
+    base["warn_hi"] = _mix(base["warn"], "#FFFFFF", 0.18) if resolved == "dark" else _mix(base["warn"], "#000000", 0.12)
+    base["purple_hi"] = _mix(base["purple"], "#FFFFFF", 0.18) if resolved == "dark" else _mix(base["purple"], "#000000", 0.12)
     # 毛玻璃底（Qt 无 backdrop-blur，用半透明近似）
     base["glass"] = "rgba(255,255,255,0.05)" if resolved == "dark" else "rgba(255,255,255,0.55)"
     base["glass_line"] = base["line"]

@@ -10,11 +10,11 @@ LCS700 演示数据 —— 逐字提取自 docs/RunchTech_V01.html 的 JS 常量
 
 DEFAULT_DEVICES = [
     {"id": "d0", "n": "您的设备1：DTS", "icon": "sedan", "cls": "",
-     "system": "国六商用车诊断系统", "obd": "适用：3.5T以上柴油卡车"},
+     "system": "国六商用车诊断系统"},
     {"id": "d1", "n": "您的设备2：X5", "icon": "suv", "cls": "orange",
-     "system": "乘用车全系统诊断仪", "obd": "适用：2.0L~3.0L 乘用车"},
+     "system": "乘用车全系统诊断仪"},
     {"id": "d2", "n": "您的设备3：正德友邦", "icon": "truck", "cls": "green",
-     "system": "重卡 ECU 诊断系统", "obd": "适用：6×4 重型牵引车"},
+     "system": "重卡 ECU 诊断系统"},
 ]
 
 # ── 设备 / 通用图标（24 viewBox inner markup，stroke 绘制） ──
@@ -51,7 +51,6 @@ IC64 = {
 # 24 viewBox 小图标（高级功能 / 设置 / 更新等）
 SMALL = {
     "can": '<path d="M10 42V22M32 42V22M54 42V22"/><path d="M10 26c8 5 14 5 22 0s14-5 22 0M10 38c8 5 14 5 22 0s14-5 22 0"/>',
-    "obd": '<path d="M6 6h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><path d="M9 6V4M15 6V4"/>',
     "eobd": '<path d="M7 7h10v7H7z"/><circle cx="9.5" cy="10.5" r="1"/><circle cx="14.5" cy="10.5" r="1"/>',
     "check": '<path d="M4 12l2.5-4.5H13L16 12M5.5 12v4M14.5 12v4"/><circle cx="8" cy="17" r="1.6"/><circle cx="15" cy="17" r="1.6"/><path d="M12.5 9.5l1 1 2-2"/>',
     "software": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/>',

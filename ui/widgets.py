@@ -15,8 +15,9 @@ from PySide6.QtWidgets import (
 from ui.theme import ThemeManager
 
 __all__ = [
-    "_prop", "section_header", "_fade_in", "_slide_up",
-    "SvgGlyph", "RunchLogo", "SparkIcon", "ClipIcon", "SendButton", "DeviceGlyph",
+    "_prop", "_set_prop_tree", "section_header", "_fade_in", "_slide_up",
+    "ClickFrame", "SvgGlyph", "RunchLogo", "SparkIcon", "ClipIcon", "SendButton", "DeviceGlyph",
+    "IconBox",
     "PhaseBar", "GlassCard", "SectionTitle", "StatusTag", "GradBar", "DevCard", "Toast",
 ]
 
@@ -27,6 +28,37 @@ def _prop(widget, name, value):
     style.unpolish(widget)
     style.polish(widget)
     return widget
+
+
+def _set_prop_tree(widget, name, value):
+    """设置属性并连同子控件一起重新 polish。
+
+    后代选择器（如 QFrame[sel="on"] QLabel#xx）只在子控件自身 polish 时重算样式，
+    仅 repolish 父控件不会让子 QLabel 的选中态生效。"""
+    _prop(widget, name, value)
+    style = widget.style()
+    for child in widget.findChildren(QWidget):
+        style.unpolish(child)
+        style.polish(child)
+        child.update()
+    return widget
+
+
+class ClickFrame(QFrame):
+    """可点击容器：QPushButton 的 sizeHint 由 QStyleOptionButton（空文本）决定，
+    会忽略内部 layout，导致 logo/头像等子控件溢出重叠；QFrame 的 sizeHint 来自
+    layout，配合点击信号即可当作"带子布局的可点按钮"使用。"""
+
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def _tokens() -> dict:
@@ -469,6 +501,27 @@ class DeviceGlyph(SvgGlyph):
         super().__init__(markup, size=size, stroke=stroke, viewbox=24, parent=parent)
 
 
+class IconBox(QFrame):
+    """彩色圆角小方块（对齐设计稿 .dev-card .pic / .quick-tile .ic）：
+    语义色软底 + SVG 描边线稿，主题切换自动重绘。
+
+    color ∈ acc/warn/ok/purple（对应 {color}_soft 底 + {color}_hi 描边）；
+    size=36 设备卡、32 快捷宫格（theme.qss #IconBox[sz] 约束）。"""
+
+    def __init__(self, markup: str = "", size: int = 36, color: str = "acc",
+                 icon_size: int | None = None, parent=None):
+        super().__init__(parent)
+        self.setObjectName("IconBox")
+        _prop(self, "ic", color)
+        _prop(self, "sz", str(size))
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setAlignment(Qt.AlignCenter)
+        if markup:
+            lay.addWidget(SvgGlyph(markup, size=icon_size or max(1, int(size * 0.56)),
+                                   stroke=f"{color}_hi"))
+
+
 # ═══════════════════════════════════════════════════════════
 #  PhaseBar  数字 01-04 四节点步进器
 # ═══════════════════════════════════════════════════════════
@@ -616,13 +669,20 @@ class GradBar(QWidget):
 
 
 class DevCard(QFrame):
-    """主页设备卡：图标 + 名称 + 系统 + OBD + 删除 ×，单选高亮，点击发信号。"""
+    """主页设备卡：居中彩色图标盒 + 名称 + 系统 + OBD，删除 × 绝对定位右上角。
+
+    对齐设计稿 .dev-card：flex column + align-items:center（图标盒与三行文字水平居中），
+    .del-btn position:absolute top:6 right:8（resizeEvent 定位，不参与布局流）。"""
 
     clicked = Signal(str)        # device id
     delete_requested = Signal(str)
 
+    # 设备图标盒色（设计稿 .pic 变体）：cls="" → user 蓝
+    _PIC_COLOR = {"orange": "warn", "green": "ok", "purple": "purple", "custom": "purple"}
+
     def __init__(self, dev: dict, parent=None):
         super().__init__(parent)
+        from ui.lcsdata import DEV_ICONS
         self._dev = dev
         self.setCursor(Qt.PointingHandCursor)
         _prop(self, "card", "dev")
@@ -630,29 +690,41 @@ class DevCard(QFrame):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)   # 内边距走 theme.qss [card="dev"] padding
         v.setSpacing(6)
-        # 头部：图标 + 删除
-        head = QHBoxLayout()
-        head.setContentsMargins(0, 0, 0, 0)
-        head.addWidget(DeviceGlyph(dev["icon"], size=40, stroke="acc"))
-        head.addStretch(1)
-        del_btn = QPushButton("×")
-        del_btn.setObjectName("devDel")    # 22x22 由 theme.qss min/max 约束
-        del_btn.setCursor(Qt.PointingHandCursor)
-        del_btn.clicked.connect(lambda: self.delete_requested.emit(self._dev["id"]))
-        head.addWidget(del_btn)
-        v.addLayout(head)
+        color = self._PIC_COLOR.get((dev.get("cls") or "").lower(), "acc")
+        box = IconBox(DEV_ICONS.get(dev["icon"], ""), size=36, color=color)
+        v.addWidget(box, 0, Qt.AlignHCenter)
         name = QLabel(dev["n"])
         name.setObjectName("devName")
         name.setWordWrap(True)
+        name.setAlignment(Qt.AlignHCenter)
         v.addWidget(name)
         sys_ = QLabel(dev.get("system", ""))
         sys_.setObjectName("devSys")
         sys_.setWordWrap(True)
+        sys_.setAlignment(Qt.AlignHCenter)
         v.addWidget(sys_)
-        obd = QLabel(dev.get("obd", ""))
-        obd.setObjectName("devObd")
-        obd.setWordWrap(True)
-        v.addWidget(obd)
+        # 默认设备已无 obd 字段（对齐设计稿 .dev-card 两行：name+sub）；有值才显示，
+        # 避免整行空标签把卡片撑高。
+        if dev.get("obd"):
+            obd = QLabel(dev["obd"])
+            obd.setObjectName("devObd")
+            obd.setWordWrap(True)
+            obd.setAlignment(Qt.AlignHCenter)
+            v.addWidget(obd)
+        # 删除 ×：不参与布局，右上角悬浮（设计 .del-btn absolute）
+        del_btn = QPushButton("×")
+        del_btn.setObjectName("devDel")    # 22x22 由 theme.qss min/max 约束
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setToolTip("删除设备")
+        del_btn.clicked.connect(lambda: self.delete_requested.emit(self._dev["id"]))
+        del_btn.setParent(self)
+        self._del_btn = del_btn
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        d = getattr(self, "_del_btn", None)
+        if d is not None:
+            d.setGeometry(self.width() - 22 - 8, 6, 22, 22)
 
     @property
     def device(self) -> dict:

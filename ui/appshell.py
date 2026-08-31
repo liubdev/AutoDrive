@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.lcsdata import ACCOUNT, PAGE_CFG
-from ui.widgets import RunchLogo, Toast, _fade_in, _prop, _slide_up
+from ui.widgets import ClickFrame, RunchLogo, Toast, _fade_in, _prop, _slide_up
 
 __all__ = ["BtnSpec", "PageSpec", "AppShell", "PAGE_ORDER", "PAGE_SPECS"]
 
@@ -110,10 +110,10 @@ class AppShell(QWidget):
         h = QHBoxLayout(bar)
         h.setContentsMargins(16, 0, 12, 0)
         h.setSpacing(10)
-        # 品牌区（点击回首页，对齐设计稿 data-go="home"）
-        brand = QPushButton()
+        # 品牌区（点击回首页，对齐设计稿 data-go="home"）。
+        # ClickFrame：QPushButton 的 sizeHint 忽略内部 layout，会压塌 logo/文字。
+        brand = ClickFrame()
         brand.setObjectName("BrandBtn")
-        brand.setCursor(Qt.PointingHandCursor)
         brand.clicked.connect(lambda: self.goPage("home"))
         bh = QHBoxLayout(brand)
         bh.setContentsMargins(0, 0, 0, 0)
@@ -128,20 +128,20 @@ class AppShell(QWidget):
         bv.addWidget(cn)
         bv.addWidget(en)
         bh.addLayout(bv)
-        h.addWidget(brand)
+        h.addWidget(brand, 0, Qt.AlignVCenter)
         h.addSpacing(6)
         self._title_pill = QLabel("")
         self._title_pill.setObjectName("PageTitlePill")
-        h.addWidget(self._title_pill)
+        h.addWidget(self._title_pill, 0, Qt.AlignVCenter)
         h.addStretch(1)
         cn_pill = QLabel("CN · LC20260828")
         cn_pill.setObjectName("CnPill")
-        h.addWidget(cn_pill)
+        h.addWidget(cn_pill, 0, Qt.AlignVCenter)
         exit_btn = QPushButton("退出")
         exit_btn.setObjectName("ExitBtn")
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.clicked.connect(self.exit_requested.emit)
-        h.addWidget(exit_btn)
+        h.addWidget(exit_btn, 0, Qt.AlignVCenter)
         # 兼容引用：设备状态 / 时钟不再显示（设计稿顶栏无此元素），
         # 对象保留以便 wizard 流程 setText 与测试断言仍可用。
         self._dev_status = QLabel("○ 就绪")
@@ -159,9 +159,8 @@ class AppShell(QWidget):
         h = QHBoxLayout(bar)
         h.setContentsMargins(16, 0, 16, 0)
         h.setSpacing(8)
-        acc = QPushButton()
+        acc = ClickFrame()
         acc.setObjectName("AccountBtn")
-        acc.setCursor(Qt.PointingHandCursor)
         acc.clicked.connect(lambda: self.goPage("account"))
         ah = QHBoxLayout(acc)
         ah.setContentsMargins(6, 4, 10, 4)
@@ -170,11 +169,11 @@ class AppShell(QWidget):
         avatar.setObjectName("AvatarLabel")
         avatar.setFixedSize(32, 32)
         avatar.setAlignment(Qt.AlignCenter)
-        ah.addWidget(avatar)
+        ah.addWidget(avatar, 0, Qt.AlignVCenter)
         name = QLabel(ACCOUNT["name"])
         name.setObjectName("AccountName")
-        ah.addWidget(name)
-        h.addWidget(acc)
+        ah.addWidget(name, 0, Qt.AlignVCenter)
+        h.addWidget(acc, 0, Qt.AlignVCenter)
         h.addStretch(1)
         self._bb_right = QHBoxLayout()
         self._bb_right.setSpacing(8)
@@ -260,7 +259,7 @@ class AppShell(QWidget):
                 b.clicked.connect(lambda _=False, to=btn.to: self.goPage(to))
             elif btn.act:
                 b.clicked.connect(lambda _=False, act=btn.act: self.nav_requested.emit(act, self._current))
-            self._bb_right.addWidget(b)
+            self._bb_right.addWidget(b, 0, Qt.AlignVCenter)
 
     # ── 设备状态 / Toast / 模态 ─────────────────
 

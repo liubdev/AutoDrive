@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
 from ui.lcsdata import DEFAULT_DEVICES, DEV_ICONS, SMALL, SYMPTOMS
 from ui.pages.base import LcsPage
 from ui.widgets import (
-    ClipIcon, DevCard, SendButton, SparkIcon, SvgGlyph, _prop,
+    ClickFrame, ClipIcon, DevCard, IconBox, SendButton, SparkIcon, SvgGlyph, _prop,
+    _set_prop_tree,
 )
 
 ORG, APP = "AutoDrive", "AutoDrive"
@@ -27,10 +28,9 @@ class _AddTile(QFrame):
         v = QVBoxLayout(self)
         v.setAlignment(Qt.AlignCenter)
         v.setSpacing(8)
-        plus = QLabel("+")
-        plus.setObjectName("devAddPlus")
-        plus.setAlignment(Qt.AlignCenter)
-        v.addWidget(plus)
+        # 设计稿 .dev-card.add .ic-plus：36px 蓝底小方块 + 加号
+        v.addWidget(IconBox('<path d="M12 5v14M5 12h14"/>', size=36, color="acc",
+                            icon_size=18), 0, Qt.AlignCenter)
         lbl = QLabel("添加您的设备")
         lbl.setObjectName("devAddLabel")
         lbl.setAlignment(Qt.AlignCenter)
@@ -39,6 +39,34 @@ class _AddTile(QFrame):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class _CatBtn(QFrame):
+    """常见故障类别胶囊（对齐设计稿 .symp-cat）：QFrame 承载圆角（QPushButton 的
+    QSS background 不按 border-radius 裁剪，本 Qt 构建下圆角失效），选中态由 sel 属性驱动。"""
+
+    clicked = Signal(str)
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(parent)
+        self._text = text
+        _prop(self, "role", "symp-cat")
+        _prop(self, "sel", "off")
+        self.setCursor(Qt.PointingHandCursor)
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)   # 内边距走 theme.qss [role="symp-cat"] padding
+        h.setAlignment(Qt.AlignCenter)
+        lbl = QLabel(text)
+        lbl.setObjectName("sympCatText")
+        h.addWidget(lbl)
+
+    def set_sel(self, on: bool):
+        _set_prop_tree(self, "sel", "on" if on else "off")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self._text)
         super().mousePressEvent(event)
 
 
@@ -65,7 +93,8 @@ class _SympItem(QFrame):
         h.addWidget(lbl)
 
     def set_selected(self, on: bool):
-        _prop(self, "sel", "on" if on else "off")
+        # 后代选择器（#sympChk / #sympText 选中态）需连子控件一起重新 polish 才生效
+        _set_prop_tree(self, "sel", "on" if on else "off")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -76,7 +105,8 @@ class _SympItem(QFrame):
 class _QuickTile(QFrame):
     clicked = Signal(str)
 
-    def __init__(self, key: str, icon: str, label: str, sub: str = "", parent=None):
+    def __init__(self, key: str, icon: str, label: str, sub: str = "", color: str = "acc",
+                 parent=None):
         super().__init__(parent)
         self._key = key
         _prop(self, "card", "quick")
@@ -85,7 +115,9 @@ class _QuickTile(QFrame):
         v.setContentsMargins(0, 0, 0, 0)   # 内边距走 theme.qss [card="quick"] padding
         v.setSpacing(6)
         v.setAlignment(Qt.AlignCenter)
-        v.addWidget(SvgGlyph(DEV_ICONS.get(icon, ""), size=22, stroke="acc"), 0, Qt.AlignCenter)
+        # 设计稿 .quick-tile .ic：32px 语义色小方块 + 16px 线稿
+        v.addWidget(IconBox(DEV_ICONS.get(icon, ""), size=32, color=color, icon_size=16),
+                    0, Qt.AlignCenter)
         lbl = QLabel(label)
         lbl.setObjectName("quickName")
         lbl.setAlignment(Qt.AlignCenter)
@@ -232,13 +264,13 @@ class HomePage(LcsPage):
         grid = QGridLayout()
         grid.setSpacing(12)
         quicks = [
-            ("report", "check", "诊断报告", "查看历史诊断"),
-            ("remote", "bluetooth", "远程协助", "专家远程支持"),
-            ("account", "home", "用户中心", "账户 / 授权 / 统计"),
-            ("settings", "theme", "系统设置", "主题 / 语言 / 关于"),
+            ("report", "check", "诊断报告", "查看历史诊断", "acc"),
+            ("remote", "bluetooth", "远程协助", "专家远程支持", "warn"),
+            ("account", "home", "用户中心", "账户 / 授权 / 统计", "ok"),
+            ("settings", "theme", "系统设置", "主题 / 语言 / 关于", "purple"),
         ]
-        for i, (pid, icon, label, sub) in enumerate(quicks):
-            t = _QuickTile(pid, icon, label, sub)
+        for i, (pid, icon, label, sub, color) in enumerate(quicks):
+            t = _QuickTile(pid, icon, label, sub, color)
             t.clicked.connect(self._go)
             grid.addWidget(t, i // 4, i % 4)
         self._add_layout(self._centered_host("quickHost", grid))
@@ -277,11 +309,9 @@ class HomePage(LcsPage):
                 w.deleteLater()
         self._symp_cat_btns = []
         for cat in SYMPTOMS:
-            b = QPushButton(cat["cat"])
-            b.setProperty("role", "symp-cat")
-            b.setCursor(Qt.PointingHandCursor)
-            _prop(b, "sel", "on" if cat["cat"] == self._cur_cat else "off")
-            b.clicked.connect(lambda _=False, c=cat["cat"]: self._switch_cat(c))
+            b = _CatBtn(cat["cat"])
+            b.set_sel(cat["cat"] == self._cur_cat)
+            b.clicked.connect(self._switch_cat)
             self._cat_row.addWidget(b)
             self._symp_cat_btns.append(b)
         self._rebuild_items()
@@ -309,7 +339,7 @@ class HomePage(LcsPage):
     def _switch_cat(self, cat: str):
         self._cur_cat = cat
         for b, c in zip(self._symp_cat_btns, SYMPTOMS):
-            _prop(b, "sel", "on" if c["cat"] == cat else "off")
+            b.set_sel(c["cat"] == cat)
         self._rebuild_items()
 
     def _toggle_item(self, item: str):
@@ -347,15 +377,14 @@ class HomePage(LcsPage):
                 _prop(_b, "sel", "on" if ic == icon else "off")
 
         for icon in ["sedan", "suv", "truck", "ev", "wrench", "chip"]:
-            b = QPushButton()
+            b = ClickFrame()
             b.setObjectName("iconPick")   # 46x46 由 theme.qss min/max 约束
-            b.setCursor(Qt.PointingHandCursor)
             _prop(b, "sel", "off")
             gly = SvgGlyph(DEV_ICONS[icon], size=28, stroke="acc")
             lay = QVBoxLayout(b)
             lay.setContentsMargins(0, 0, 0, 0)
             lay.addWidget(gly, 0, Qt.AlignCenter)
-            b.clicked.connect(lambda _=False, ic=icon: _pick(ic))
+            b.clicked.connect(lambda ic=icon: _pick(ic))
             icon_row.addWidget(b)
             icon_btns.append((icon, b))
         v.addLayout(icon_row)
