@@ -163,29 +163,69 @@ def set_focus(hwnd: int) -> bool:
     return False
 
 
-def send_keys(hwnd_top: int, keys: str, pause: float = 0.05) -> bool:
-    """向 DTS 窗口投递键盘输入（pywinauto 语法，如 '{DOWN 2}{ENTER}' / 文件名）"""
+def window_pid(hwnd: int) -> int:
+    """窗口所属进程 PID（GetWindowThreadProcessId 的 out 参数）"""
+    if not hwnd:
+        return 0
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value)
+
+
+def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,
+              target_hwnd: int = None) -> bool:
+    """向 DTS 窗口投递键盘输入（pywinauto 语法，如 '{DOWN 2}{ENTER}' / 文件名）。
+
+    target_hwnd 指定目标控件时，在同一 AttachThreadInput 块内先 SetFocus 再
+    投递 —— 焦点与按键原子完成。即使外部（如 AutoDrive 前台守卫）随后抢走
+    前台，也不会打断本次投递；方向键/输入框等必须落在具体控件上的场景用它。
+    """
     if not hwnd_top:
         return False
-    target = _get_focus(hwnd_top)
-    if target == hwnd_top:
-        # 顶层窗口没有子控件持有键盘焦点 → ENTER/SPACE 等导航键不会触发
-        # 默认按钮。后台安全地给顶层窗口设焦点（不激活、不抢前台），再投递。
-        set_focus(hwnd_top)
-        logger.debug("无子控件焦点，已为顶层窗口 0x%X 建立焦点", hwnd_top)
     try:
         actions = kb.parse_keys(keys)
     except Exception as e:  # noqa: BLE001
         logger.warning("解析按键失败 %r: %s", keys, e)
         return False
-    for act in actions:
-        try:
-            _post_key_action(target, act)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("投递按键失败 %r: %s", act, e)
-        time.sleep(pause)
-    logger.info("按键 %r → 窗口0x%X (焦点0x%X)", keys, hwnd_top, target)
-    return True
+
+    dts_thread = user32.GetWindowThreadProcessId(hwnd_top, None)
+    cur = kernel32.GetCurrentThreadId()
+    attached = False
+    if dts_thread and dts_thread != cur:
+        attached = bool(user32.AttachThreadInput(cur, dts_thread, True))
+
+    def _dts_thread_has(target: int) -> bool:
+        return bool(target) and user32.GetWindowThreadProcessId(target, None) == dts_thread
+
+    try:
+        target = 0
+        if target_hwnd and attached:
+            # 目标控件：先 SetFocus（DTS 已激活时立即生效），再读当前焦点
+            user32.SetFocus(target_hwnd)
+            target = user32.GetFocus()
+            if not _dts_thread_has(target):
+                target = 0
+        if not target:
+            # 在已 attach 的块内直接读焦点（不调 _get_focus，避免其内部 detach 打断原子性）
+            target = user32.GetFocus()
+            if not _dts_thread_has(target):
+                target = 0
+        if not target:
+            # 顶层窗口没有子控件持有键盘焦点 → 建焦点再投递（导航键才触发默认按钮）
+            target = hwnd_top
+            set_focus(hwnd_top)
+            logger.debug("无子控件焦点，已为顶层窗口 0x%X 建立焦点", hwnd_top)
+        for act in actions:
+            try:
+                _post_key_action(target, act)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("投递按键失败 %r: %s", act, e)
+            time.sleep(pause)
+        logger.info("按键 %r → 窗口0x%X (焦点0x%X)", keys, hwnd_top, target)
+        return True
+    finally:
+        if attached:
+            user32.AttachThreadInput(cur, dts_thread, False)
 
 
 # ═══════════════════════════════════════════════════════

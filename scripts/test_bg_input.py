@@ -31,7 +31,8 @@ def check(name, cond):
 # ── 1. 消息式输入层 ─────────────────────────────────
 captured = []
 bg.user32.PostMessageW = lambda hwnd, m, w, l: captured.append((hwnd, m, w, l)) or 1
-bg._get_focus = lambda top: 0x1234
+# send_keys 新实现：在 AttachThreadInput 块内直接 GetFocus 读目标（原子聚焦+投递）
+bg.user32.GetFocus = lambda: 0x1234
 bg.send_keys(0x999, "{DOWN 2}{ENTER}DataFlow_List_1.txt", pause=0.0)
 d = [m for _, m, _, _ in captured if m == 0x0100]
 u = [m for _, m, _, _ in captured if m == 0x0101]

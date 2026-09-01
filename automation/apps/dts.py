@@ -219,58 +219,80 @@ class DtsApp(BaseApp):
 
     # ── 逐行复制（不确定行数，复制到内容重复为止） ─────
 
-    def _dts_top_windows(self) -> list:
-        """当前 DTS 进程的全部顶层窗口句柄（主窗+弹窗），新的优先。"""
-        handles = set()
-        try:
-            for w in self._find_windows_by_exe():
-                handles.add(int(w.handle))
-        except Exception:
-            pass
-        if not handles:
-            hwnd = self._hwnd()
-            if hwnd:
-                handles.add(hwnd)
-        return sorted(handles, reverse=True)
-
     def focus_active_window(self, timeout: int = 8) -> bool:
-        """聚焦 DTS 当前窗口（主窗或弹窗）—— 后台模式也执行。
+        """把 DTS 当前窗口置为活动（后台模式也执行）。
 
         后台模式 DTS 常驻后台、从不激活：弹窗（保存/载入/确认）打开后系统不会
         给其输入框分配键盘焦点，PostMessage 按键会投到主窗口/旧焦点上而无效。
-        本方法把 DTS 进程的顶层窗口依次置为活动（AttachThreadInput +
-        SetForegroundWindow；AutoDrive 是 topmost，视觉上 DTS 仍被盖住），
-        弹窗被激活后系统才会给其默认输入框分配焦点，后续按键落到正确控件上。
+        本方法把 DTS 主窗口置为活动（AttachThreadInput + SetForegroundWindow；
+        modal 弹窗由所有者继承激活；AutoDrive 是 topmost，视觉上 DTS 仍被盖住），
+        弹窗激活后系统才会给其默认输入框分配焦点。
+
+        只激活已连接的主窗口（_hwnd()）—— 比按进程枚举全部顶层窗口快得多
+        （find_elements 全量 UIA 枚举一次耗数秒），且 modal 弹窗无需逐个激活。
         """
         if not self.background:
             return bool(self.window and self.window.set_focus())
-        for hwnd in self._dts_top_windows():
-            if bg.force_foreground(hwnd):
-                time.sleep(0.15)
-                return True
+        hwnd = self._hwnd()
+        if hwnd and bg.force_foreground(hwnd):
+            time.sleep(0.15)
+            return True
+        return False
+
+    def _dts_foreground_window(self) -> int:
+        """DTS 当前活动顶层窗口句柄（GetForegroundWindow + pid 校验，无 UIA 枚举）。
+
+        保存/载入弹窗（如「保存列表」）打开后即成为活动窗口 → 前台窗口就是弹窗
+        本身，直接搜它的 Edit。前台不是 DTS 时回退主窗口。
+        """
+        fg = bg.active_window()
+        if fg and self.pid:
+            try:
+                if bg.window_pid(fg) == self.pid:
+                    return fg
+            except Exception:
+                pass
+        return self._hwnd()
+
+    def _edit_search_windows(self) -> list:
+        """搜索文件名输入框的窗口候选：活动弹窗优先，其次主窗口，去重。"""
+        hwnds = []
+        for h in (self._dts_foreground_window(), self._hwnd()):
+            if h and h not in hwnds:
+                hwnds.append(h)
+        return hwnds
+
+    def _focus_first_edit(self, hwnd: int) -> bool:
+        """在指定顶层窗口下找第一个可见 Edit 并线程级 SetFocus；成功打日志。"""
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=hwnd)
+            edit = root.child_window(control_type="Edit", found_index=0)
+            if edit.exists(timeout=0.5):
+                r = edit.rectangle()
+                if r.width() > 0 and r.height() > 0:   # 可见
+                    if self.set_focus_bg(edit):
+                        time.sleep(0.3)
+                        logger.info("已聚焦文件名输入框")
+                        return True
+        except Exception:
+            pass
         return False
 
     def focus_edit_in_dialog(self, timeout: int = 5) -> bool:
-        """等弹窗（保存/载入）的文件名输入框出现并聚焦。
+        """等弹窗（保存/载入，标题如「保存列表」）的文件名输入框出现并聚焦。
 
-        先激活 DTS 窗口，再找到当前可见的 Edit 并线程级 SetFocus —— 之后
-        send_keys 的文件名才会落到输入框，而不是打进主窗口空处。
+        保存弹窗是 DTS 独立的顶层窗口，不在主窗口 self.window 的子树里 ——
+        先激活 DTS 使其成为活动窗口，再优先在活动弹窗里找 Edit，找不到才回退
+        主窗口。之后 send_keys 的文件名才会落到输入框，而不是打进主窗口空处。
         """
         self.focus_active_window()
         deadline = time.time() + timeout
         while time.time() < deadline:
-            try:
-                edit = self.window.child_window(
-                    control_type="Edit", found_index=0)
-                if edit.exists(timeout=0.5):
-                    r = edit.rectangle()
-                    if r.width() > 0 and r.height() > 0:   # 可见
-                        if self.set_focus_bg(edit):
-                            time.sleep(0.3)
-                            logger.info("已聚焦文件名输入框")
-                            return True
-            except Exception:
-                pass
+            for hwnd in self._edit_search_windows():
+                if hwnd and self._focus_first_edit(hwnd):
+                    return True
             time.sleep(0.3)
         logger.warning("弹窗文件名输入框未在 %ds 内出现/聚焦", timeout)
         return False
@@ -281,6 +303,9 @@ class DtsApp(BaseApp):
 
         列表窗格信息:
           auto_id="1131", class=AfxWnd80su, {l:20 t:108 r:1903 b:937}
+
+        后台从不激活 → 控件无键盘焦点，方向键无效；先激活窗口再聚焦列表。
+        返回窗格控件，供 send_keys_to 做原子「聚焦+投递」；失败返回 None。
         """
         # 后台从不激活 → 控件无键盘焦点，方向键无效；先激活窗口再聚焦列表
         self.focus_active_window()
@@ -292,7 +317,7 @@ class DtsApp(BaseApp):
                 self.set_focus_bg(pane)  # 后台=消息式设焦点，不抢前台
                 time.sleep(0.3)
                 logger.info("已聚焦列表窗格")
-                return True
+                return pane
         except Exception as e:
             logger.warning(f"聚焦列表失败: {e}")
 
@@ -306,10 +331,10 @@ class DtsApp(BaseApp):
                 self.click_at(r.left + 50, r.top + 30)
                 time.sleep(0.5)
                 logger.info("已点击列表聚焦(降级)")
-                return True
+                return pane
         except Exception as e:
             logger.warning(f"点击列表失败: {e}")
-        return False
+        return None
 
     def copy_all_rows(self, copy_btn_id: str, max_rows: int = 20) -> list:
         """
@@ -330,17 +355,19 @@ class DtsApp(BaseApp):
         results = []
         last_text = None
 
-        self._focus_list()
+        pane = self._focus_list()
         for _ in range(3):
-            self.send_keys("{UP}")
+            # send_keys_to: 同一 AttachThreadInput 块内 SetFocus(窗格)+投递，
+            # 前台守卫即使随后抢走前台也不打断本次方向键
+            self.send_keys_to("{UP}", pane)
             time.sleep(1)
 
         for i in range(max_rows):
             if i > 0:
                 logger.info("选择下一个选项")
-                # 先点列表聚焦，再 DOWN
-                self._focus_list()
-                self.send_keys("{DOWN}")
+                # 先点列表聚焦，再 DOWN（原子聚焦+投递）
+                pane = self._focus_list()
+                self.send_keys_to("{DOWN}", pane)
                 time.sleep(2)
             # 点击复制按钮
             btn = self.window.child_window(

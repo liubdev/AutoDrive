@@ -36,7 +36,7 @@ if str(_HERE) not in sys.path:
 from automation.apps.dts import DtsApp
 from automation import background as bg
 from automation.flow.engine import ERROR, FlowEngine
-from automation.flows.dts_flow import build_dts_flow, make_output_dir
+from automation.flows.dts_flow import build_dts_flow, make_output_dir, close_run_log
 from ui.appshell import AppShell
 from ui.lcsdata import DEMO_VEHICLE, DIAG_STEPS, DYN_MSGS, EBS_DTC
 from ui.pages import PAGE_REGISTRY
@@ -458,6 +458,12 @@ class MainWindow(QMainWindow):
     def _fg_guard_tick(self):
         if not self._fg_guard_on:
             return
+        # DTS 采集期间：自动化需要 DTS 保持活动窗口（弹窗输入框 / 方向键 / 列表
+        # 焦点都依赖它被激活），守卫每 500ms 夺回前台会把 DTS 的线程焦点清掉，
+        # 导致 PostMessage 按键落到主窗口/旧焦点上无效 —— 采集中不夺回，
+        # 收尾由 _stop_fg_guard 把前台归还 AutoDrive。
+        if self._running:
+            return
         our = int(self.winId())
         if bg.is_active(our):
             return
@@ -487,14 +493,17 @@ class MainWindow(QMainWindow):
         self._refresh_report_page()
         if self._pending_auto_ai:
             self._pending_auto_ai = False
-            self._start_ai_diagnosis(auto=True)
-        elif self._flow_errored():
-            # 流程真实失败：明确报错，不静默降级演示
-            self.ai_diag.show_error(
-                "DTS 自动化流程执行失败，请查看上方步骤状态（未填充演示数据）")
+            self._start_ai_diagnosis(auto=True)   # AI 日志继续进报告同名日志
         else:
-            # 流程成功但无数据（真机但采集为空） → 演示降级
-            self._run_demo_diagnosis("未检测到诊断数据，已填充演示数据")
+            # 本次报告生命周期结束（无自动 AI）→ 报告同名日志收口
+            close_run_log()
+            if self._flow_errored():
+                # 流程真实失败：明确报错，不静默降级演示
+                self.ai_diag.show_error(
+                    "DTS 自动化流程执行失败，请查看上方步骤状态（未填充演示数据）")
+            else:
+                # 流程成功但无数据（真机但采集为空） → 演示降级
+                self._run_demo_diagnosis("未检测到诊断数据，已填充演示数据")
 
     def _flow_errored(self) -> bool:
         """流程是否曾出现步骤失败（区别于「成功但无数据」）"""
@@ -615,12 +624,15 @@ class MainWindow(QMainWindow):
         self.shell.toast("AI 诊断已完成")
         # AI 结论已写入报告目录 → 报告面板刷新，用 AI 结论覆盖故障码摘要
         self._refresh_report_page()
+        # 本次报告生命周期（采集 + AI）结束 → 报告同名日志收口
+        close_run_log()
 
     def _on_ai_failed(self, msg):
         self._ai_running = False
         self.ai_diag.set_running(False)
         self.ai_diag.show_error(msg)
         self._dev_status.setText("○ 就绪")
+        close_run_log()   # AI 失败同样结束本次报告生命周期
 
     # ── 演示降级：无真机 / 未接入自动化 ─────────────
 

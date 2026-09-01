@@ -453,6 +453,28 @@ class BaseApp:
         logger.info(f"  Keys: {keys}")
         return self
 
+    def send_keys_to(self, keys: str, ctrl=None):
+        """聚焦目标控件后按键（后台=同一 AttachThreadInput 块内 SetFocus+投递）。
+
+        用于必须落在具体控件上的按键 —— 如故障码列表的 UP/DOWN 切换选中行、
+        弹窗输入框的文件名。不带 ctrl 时等价 send_keys。
+        """
+        if not self.background:
+            return self.send_keys(keys)
+        hwnd = self._hwnd()
+        if not hwnd:
+            logger.warning("后台按键但未连接窗口，跳过: %s", keys)
+            return self
+        target = None
+        if ctrl is not None:
+            try:
+                target = int(ctrl.handle)
+            except Exception:
+                target = None
+        bg.send_keys(hwnd, keys, target_hwnd=target)
+        logger.info(f"  Keys: {keys}")
+        return self
+
     def click_ctrl(self, ctrl) -> bool:
         """点击控件：后台=UIA Invoke（消息式，最小化/屏幕外均有效）；前台=物理点击"""
         if self.background:

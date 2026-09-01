@@ -18,13 +18,59 @@ from automation.flow.engine import FlowStep
 
 log = logging.getLogger("autodrive.flow.dts")
 
+# 当前运行的日志 handler（挂根 logger，输出到报告目录内同名 .log）。
+# 同进程多次采集时先摘掉上一个再挂新的，避免 handler 累积、旧报告被续写。
+_RUN_LOG_HANDLER = None
+
+
+def close_run_log():
+    """收口当前运行的报告同名日志（摘掉 handler 并关闭文件）。
+
+    报告的完整生命周期（采集 + AI 诊断）结束后调用，避免后续无关日志
+    （页面导航等）继续写进上一次报告的 .log。无活动运行日志时是安全空操作。
+    """
+    global _RUN_LOG_HANDLER
+    root = logging.getLogger()
+    if _RUN_LOG_HANDLER is not None:
+        root.removeHandler(_RUN_LOG_HANDLER)
+        try:
+            _RUN_LOG_HANDLER.close()
+        except Exception:  # noqa: BLE001
+            pass
+        _RUN_LOG_HANDLER = None
+
+
+def _attach_run_log(out_dir: Path):
+    """把本次运行的日志也写入 out_dir/DTS_xxx.log —— 与报告目录同名。
+
+    报告目录自带执行日志：拷走报告文件夹即带走本次执行的完整日志
+    （采集 + AI 诊断全程，root logger 上 autodrive.* / autocar.* 都落这里）。
+    每日日志 data/logs/autodrive_YYYYMMDD.log 保留为会话级日志。
+    下次采集（make_output_dir）会先摘掉上一个 handler，旧报告日志不再续写。
+    """
+    close_run_log()
+    if out_dir is None:
+        return
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s",
+                            datefmt="%H:%M:%S")
+    fh = logging.FileHandler(out_dir / f"{out_dir.name}.log", encoding="utf-8")
+    fh.setFormatter(fmt)
+    root = logging.getLogger()
+    root.addHandler(fh)
+    global _RUN_LOG_HANDLER
+    _RUN_LOG_HANDLER = fh
+
 
 def make_output_dir(root: Path = None) -> Path:
-    """创建带时间戳的输出目录 data/reports/DTS_YYYYMMDD_HHMMSS/"""
+    """创建带时间戳的输出目录 data/reports/DTS_YYYYMMDD_HHMMSS/
+
+    同时把本次运行的日志挂到该目录内同名 .log（与报告名字保持一致）。
+    """
     root = root or Path(__file__).resolve().parent.parent.parent
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = root / "data" / "reports" / f"DTS_{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)
+    _attach_run_log(out_dir)
     return out_dir
 
 
