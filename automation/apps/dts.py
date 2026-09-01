@@ -390,7 +390,9 @@ class DtsApp(BaseApp):
     # ═══════════════════════════════════════════════
 
     def _reconnect_main(self, timeout: int = 15) -> bool:
+        """重连 DTS 主窗口；超时打诊断（期间见过的顶层窗口），便于定位启动失败"""
         deadline = time.time() + timeout
+        seen = set()
         while time.time() < deadline:
             wins = find_elements(backend="uia", top_level_only=True)
             for w in wins:
@@ -398,6 +400,7 @@ class DtsApp(BaseApp):
                     if w.class_name == "CDTS650MainClass":
                         self._connect_by_handle(w.handle, w.process_id)
                         self._apply_window_hiding()
+                        logger.info("已连接 DTS 主窗口 (hwnd=%s)", w.handle)
                         return True
                 except Exception:
                     continue
@@ -406,14 +409,24 @@ class DtsApp(BaseApp):
                     if w.class_name == "#32770" and "DTS" in (w.name or ""):
                         self._connect_by_handle(w.handle, w.process_id)
                         self._apply_window_hiding()
+                        logger.info("已连接 DTS 弹窗 (hwnd=%s)", w.handle)
                         return True
                 except Exception:
                     continue
+            for w in wins:
+                try:
+                    seen.add(f"{w.class_name}|{w.name}")
+                except Exception:
+                    pass
             time.sleep(0.5)
+        logger.warning("DTS 主窗口未在 %ds 内出现；期间见过的顶层窗口: %s",
+                       timeout, sorted(seen)[:20] or "（无）")
         return False
 
     def _wait_for_dts_window(self, timeout: int = 30):
+        """等 DTS 启动确认弹窗 (#32770 + 子控件"确认")；超时打所见窗口诊断"""
         deadline = time.time() + timeout
+        seen = set()
         while time.time() < deadline:
             wins = find_elements(backend="uia", top_level_only=True)
             for w in wins:
@@ -423,10 +436,18 @@ class DtsApp(BaseApp):
                             if child.name == "确认":
                                 self._connect_by_handle(w.handle)
                                 self._apply_window_hiding()
+                                logger.info("已连接 DTS 确认窗口 (hwnd=%s)", w.handle)
                                 return True
                 except Exception:
                     continue
+            for w in wins:
+                try:
+                    seen.add(f"{w.class_name}|{w.name}")
+                except Exception:
+                    pass
             time.sleep(0.5)
+        logger.warning("DTS 确认窗口未在 %ds 内出现；期间见过的顶层窗口: %s",
+                       timeout, sorted(seen)[:20] or "（无）")
         return False
 
     def ensure_running(self, timeout: int = 30) -> bool:
@@ -446,4 +467,7 @@ class DtsApp(BaseApp):
 
             subprocess.Popen([self.APP_EXE])
         self._launched_by_us = True
-        return self._wait_for_dts_window(timeout)
+        logger.info("等待 DTS 启动窗口 (超时 %ds)", timeout)
+        ok = self._wait_for_dts_window(timeout)
+        logger.info("DTS 启动窗口连接: %s", "成功" if ok else "失败")
+        return ok

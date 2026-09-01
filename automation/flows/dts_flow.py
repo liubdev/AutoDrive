@@ -76,7 +76,7 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
 
     # ── 第1步: 启动 ──
     steps.append(FlowStep("启动 DTS",
-                          action=lambda: app.ensure_running(timeout=12)))
+                          action=lambda: app.ensure_running(timeout=30)))
 
     # ── 第2步: 确认 ──
     steps.append(FlowStep("确认",
