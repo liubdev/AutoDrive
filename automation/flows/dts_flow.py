@@ -320,7 +320,11 @@ def _process_flow(app: DtsApp, flow_no: int):
     log.info("点击 保存列表 按钮")
     app.click_ctrl(save_btn)
     time.sleep(0.5)
-    app.send_keys(f"{file_name}{{ENTER}}")
+    # 保存弹窗出现 → 先激活窗口让弹窗获得焦点，再聚焦文件名输入框，最后输入
+    app.focus_active_window()
+    if not app.focus_edit_in_dialog(timeout=4):
+        log.warning("保存对话框文件名输入框未出现/聚焦失败")
+    app.send_keys(f"^a{file_name}{{ENTER}}")
 
     # 处理覆盖弹窗
     for _ in range(8):
@@ -340,7 +344,11 @@ def _process_flow(app: DtsApp, flow_no: int):
     )
     log.info("点击 载入列表 按钮")
     app.click_ctrl(load_btn)
-    app.send_keys(f"{file_name}{{ENTER}}{{ENTER}}{{ENTER}}")
+    # 载入(打开)弹窗 → 先激活窗口 + 聚焦文件名输入框，再输入
+    app.focus_active_window()
+    if not app.focus_edit_in_dialog(timeout=4):
+        log.warning("载入对话框文件名输入框未出现/聚焦失败")
+    app.send_keys(f"^a{file_name}{{ENTER}}{{ENTER}}{{ENTER}}")
     time.sleep(10)
 
     # 返回
@@ -350,5 +358,7 @@ def _process_flow(app: DtsApp, flow_no: int):
     if back_btn.exists(timeout=3):
         log.info("点击 返回 按钮")
         app.click_ctrl(back_btn)
-    # 自定义文件名
+    # 自定义文件名（先聚焦输入框，避免打进主窗口空处）
+    app.focus_active_window()
+    app.focus_edit_in_dialog(timeout=4)
     app.send_keys(f"{file_name}")

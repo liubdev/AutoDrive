@@ -219,6 +219,62 @@ class DtsApp(BaseApp):
 
     # ── 逐行复制（不确定行数，复制到内容重复为止） ─────
 
+    def _dts_top_windows(self) -> list:
+        """当前 DTS 进程的全部顶层窗口句柄（主窗+弹窗），新的优先。"""
+        handles = set()
+        try:
+            for w in self._find_windows_by_exe():
+                handles.add(int(w.handle))
+        except Exception:
+            pass
+        if not handles:
+            hwnd = self._hwnd()
+            if hwnd:
+                handles.add(hwnd)
+        return sorted(handles, reverse=True)
+
+    def focus_active_window(self, timeout: int = 8) -> bool:
+        """聚焦 DTS 当前窗口（主窗或弹窗）—— 后台模式也执行。
+
+        后台模式 DTS 常驻后台、从不激活：弹窗（保存/载入/确认）打开后系统不会
+        给其输入框分配键盘焦点，PostMessage 按键会投到主窗口/旧焦点上而无效。
+        本方法把 DTS 进程的顶层窗口依次置为活动（AttachThreadInput +
+        SetForegroundWindow；AutoDrive 是 topmost，视觉上 DTS 仍被盖住），
+        弹窗被激活后系统才会给其默认输入框分配焦点，后续按键落到正确控件上。
+        """
+        if not self.background:
+            return bool(self.window and self.window.set_focus())
+        for hwnd in self._dts_top_windows():
+            if bg.force_foreground(hwnd):
+                time.sleep(0.15)
+                return True
+        return False
+
+    def focus_edit_in_dialog(self, timeout: int = 5) -> bool:
+        """等弹窗（保存/载入）的文件名输入框出现并聚焦。
+
+        先激活 DTS 窗口，再找到当前可见的 Edit 并线程级 SetFocus —— 之后
+        send_keys 的文件名才会落到输入框，而不是打进主窗口空处。
+        """
+        self.focus_active_window()
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                edit = self.window.child_window(
+                    control_type="Edit", found_index=0)
+                if edit.exists(timeout=0.5):
+                    r = edit.rectangle()
+                    if r.width() > 0 and r.height() > 0:   # 可见
+                        if self.set_focus_bg(edit):
+                            time.sleep(0.3)
+                            logger.info("已聚焦文件名输入框")
+                            return True
+            except Exception:
+                pass
+            time.sleep(0.3)
+        logger.warning("弹窗文件名输入框未在 %ds 内出现/聚焦", timeout)
+        return False
+
     def _focus_list(self):
         """
         聚焦列表窗格(auto_id=1131)，让 DOWN/UP 能切换选中行
@@ -226,6 +282,8 @@ class DtsApp(BaseApp):
         列表窗格信息:
           auto_id="1131", class=AfxWnd80su, {l:20 t:108 r:1903 b:937}
         """
+        # 后台从不激活 → 控件无键盘焦点，方向键无效；先激活窗口再聚焦列表
+        self.focus_active_window()
         try:
             pane = self.window.child_window(
                 auto_id="1131", control_type="Pane", found_index=0
@@ -238,7 +296,7 @@ class DtsApp(BaseApp):
         except Exception as e:
             logger.warning(f"聚焦列表失败: {e}")
 
-        # 降级: 点击窗格第一行位置
+        # 降级: 点击窗格第一行位置（窗口已激活，SendMessage 点击才能拿到焦点）
         try:
             pane = self.window.child_window(
                 auto_id="1131", control_type="Pane", found_index=0
