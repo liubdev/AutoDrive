@@ -168,6 +168,11 @@ def send_keys(hwnd_top: int, keys: str, pause: float = 0.05) -> bool:
     if not hwnd_top:
         return False
     target = _get_focus(hwnd_top)
+    if target == hwnd_top:
+        # 顶层窗口没有子控件持有键盘焦点 → ENTER/SPACE 等导航键不会触发
+        # 默认按钮。后台安全地给顶层窗口设焦点（不激活、不抢前台），再投递。
+        set_focus(hwnd_top)
+        logger.debug("无子控件焦点，已为顶层窗口 0x%X 建立焦点", hwnd_top)
     try:
         actions = kb.parse_keys(keys)
     except Exception as e:  # noqa: BLE001

@@ -390,7 +390,13 @@ class DtsApp(BaseApp):
     # ═══════════════════════════════════════════════
 
     def _reconnect_main(self, timeout: int = 15) -> bool:
-        """重连 DTS 主窗口；超时打诊断（期间见过的顶层窗口），便于定位启动失败"""
+        """重连 DTS 主窗口；超时打诊断（期间见过的顶层窗口+pid），便于定位启动失败
+
+        匹配顺序：
+          1. 类名快速路径（CDTS650MainClass 主窗 / #32770 弹窗）
+          2. 跨版本兜底：按 DTS 进程匹配任意顶层窗口 —— 类名随版本漂移
+             （如 DTS 20260706 的主窗类已不是 CDTS650MainClass）时仍能连上。
+        """
         deadline = time.time() + timeout
         seen = set()
         while time.time() < deadline:
@@ -413,9 +419,19 @@ class DtsApp(BaseApp):
                         return True
                 except Exception:
                     continue
+            # 跨版本兜底：DTS 进程的任意顶层窗口（类名不再可靠）
+            for w in self._find_windows_by_exe():
+                try:
+                    self._connect_by_handle(w.handle, w.process_id)
+                    self._apply_window_hiding()
+                    logger.info("已连接 DTS 进程窗口 (hwnd=%s, class=%s)",
+                                w.handle, w.class_name)
+                    return True
+                except Exception:
+                    continue
             for w in wins:
                 try:
-                    seen.add(f"{w.class_name}|{w.name}")
+                    seen.add(f"{w.class_name}|{w.name}|pid={w.process_id}")
                 except Exception:
                     pass
             time.sleep(0.5)
