@@ -190,6 +190,8 @@ class AiDiagPage(LcsPage):
     # ── 等待 / 运行状态 ────────────────────────
 
     def _set_waiting(self):
+        """整页回到空态（重新执行时调用）：清空上一次的动态信息 / 车辆信息 /
+        故障码 / 诊断结果，等待新流程的内容渲染，而不是旧内容残留。"""
         self._status_lbl.setText("等待运行数据")
         self._dyn_status.setText("等待开始")
         _prop(self._dyn_status, "state", "running")
@@ -200,6 +202,14 @@ class AiDiagPage(LcsPage):
         self._step_pager.setText("")
         self._steps = []
         self._steps_title.hide()
+        _clear(self._dyn_list)
+        for v in self._veh_vals.values():
+            v.setText("—")
+        _clear(self._veh_dtc_list)
+        self._vin_tag.hide()
+        self._result_meta.setText("")
+        self._result = None
+        self._out_dir = None
 
     # ── 旧 AiPage 方法名兼容（wizard / 测试） ────
 

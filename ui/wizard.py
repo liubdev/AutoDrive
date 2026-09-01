@@ -328,6 +328,9 @@ class MainWindow(QMainWindow):
             return
         self._out_dir = make_output_dir()
         _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
+        # 重新执行：报告面板先初始化（清空旧列表 → 采集中等待态），
+        # 等新报告生成后 _refresh_report_page 再渲染新内容
+        self._prepare_report_page()
         from config.settings import settings
 
         _safe_log(logging.INFO,
@@ -367,6 +370,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             self._bridge.run_finished.emit()
+
+    # ── 报告面板：采集中初始化 / 收尾刷新 ─────────────
+
+    def _prepare_report_page(self):
+        """DTS 采集开始时初始化报告面板（懒加载构建 + 采集中等待态）。"""
+        rp = self._ensure_page("report")
+        if rp is not None and hasattr(rp, "prepare_run"):
+            rp.prepare_run()
+
+    def _refresh_report_page(self):
+        """诊断流程收尾：报告面板恢复并刷新，展示新生成的报告（含 AI 结论）。"""
+        rp = self.pages.get("report")
+        if rp is not None and hasattr(rp, "finish_run"):
+            rp.finish_run()
 
     # ── 引擎事件（主线程） ────────────────────────
 
@@ -455,6 +472,8 @@ class MainWindow(QMainWindow):
         self._stop_fg_guard()
         self.ai_diag.set_running(False)
         self._dev_status.setText("○ 就绪")
+        # 采集收尾（无论成败/取消）：报告面板刷新，退出"采集中"等待态
+        self._refresh_report_page()
         if self._pending_auto_ai:
             self._pending_auto_ai = False
             self._start_ai_diagnosis(auto=True)
@@ -583,6 +602,8 @@ class MainWindow(QMainWindow):
         self._dev_status.setText("○ 就绪")
         self._set_phase("report")
         self.shell.toast("AI 诊断已完成")
+        # AI 结论已写入报告目录 → 报告面板刷新，用 AI 结论覆盖故障码摘要
+        self._refresh_report_page()
 
     def _on_ai_failed(self, msg):
         self._ai_running = False

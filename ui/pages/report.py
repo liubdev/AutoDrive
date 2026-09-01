@@ -3,7 +3,9 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+)
 
 from ui.lcsdata import DEMO_REPORTS
 from ui.pages.base import LcsPage
@@ -14,7 +16,31 @@ from ui.widgets import GlassCard, StatusTag, _prop
 
 __all__ = ["ReportListPage"]
 
-_CATS = ["时间", "设备", "概述", "操作"]
+# 设计稿 .rl-head/.rl-row grid-template-columns: 1.35fr 1fr 2.4fr 1.25fr
+# Qt 无 fr 单位，用 QGridLayout 列 stretch 等比放大到整数
+_GRID_STRETCH = (135, 100, 240, 125)
+_COLS = ["测试时间", "测试设备", "诊断概述", "操作"]
+
+
+class _ElideLabel(QLabel):
+    """单行省略标签：宽度不足时末尾加 …（对齐设计稿 .rl-row .summary
+    text-overflow: ellipsis + white-space: nowrap）。"""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self._full = text
+        super().setText(text)
+
+    def setText(self, text: str):
+        self._full = text or ""
+        super().setText(self._full)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        fm = self.fontMetrics()
+        elided = fm.elidedText(self._full, Qt.ElideRight, self.width())
+        if elided != self.text():
+            super().setText(elided)
 
 
 class ReportListPage(LcsPage):
@@ -25,6 +51,7 @@ class ReportListPage(LcsPage):
         self._store = ReportStore()
         self._loader = ReportLoader()
         self._paper = None
+        self._running = False   # 诊断流程执行中 → 显示"采集中"等待态
         self._build_ui()
 
     def _build_ui(self):
@@ -45,12 +72,44 @@ class ReportListPage(LcsPage):
         self._paper.hide()
         self._add(self._paper)
 
+        # 诊断报告列表 —— 单一玻璃容器（设计稿 .report-list glass）
+        # 表头 + 数据行共用同一套网格（_GRID_STRETCH），保证四列上下对齐
+        self._list_card = GlassCard(padding=16)
         self._list = QVBoxLayout()
-        self._list.setSpacing(8)
-        self._add_layout(self._list)
+        self._list.setSpacing(0)
+        self._list_card.layout.addLayout(self._list)
+        self._add(self._list_card)
 
     def on_enter(self):
+        if self._running:
+            # 诊断流程执行中：保持"采集中"等待态，不渲染上一次的报告列表
+            return
         self.refresh()
+
+    def prepare_run(self):
+        """重新执行诊断：报告面板先初始化——清空旧列表并显示"采集中"等待态，
+        等新报告生成后再渲染（而不是上一次的内容还在、同时新流程在跑）。"""
+        self._running = True
+        self._paper.hide()
+        self._clear_list()
+        hint = QLabel("正在执行诊断，报告生成后将自动刷新…")
+        hint.setObjectName("rlEmpty")
+        hint.setAlignment(Qt.AlignCenter)
+        self._list.addWidget(hint)
+        self._count_tag.setText("采集中…")
+
+    def finish_run(self):
+        """诊断流程收尾：恢复并刷新报告列表，展示新生成的报告。"""
+        self._running = False
+        self.refresh()
+
+    def _clear_list(self):
+        """清空报告列表容器（表头 / 数据行 / 等待提示）。"""
+        while self._list.count():
+            item = self._list.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
 
     def refresh(self):
         metas = self._store.list_reports()
@@ -59,61 +118,76 @@ class ReportListPage(LcsPage):
             metas = [ReportMeta(time=r["time"], dev=r["dev"], summary=r["summary"])
                      for r in DEMO_REPORTS]
         self._count_tag.setText(f"{len(metas)} 份报告" + (" · 演示数据" if demo else ""))
-        while self._list.count():
-            item = self._list.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
+        self._clear_list()
         if not metas:
             hint = QLabel("暂无诊断报告，请先运行一次 AI 智能诊断")
-            hint.setObjectName("SecHint")
+            hint.setObjectName("rlEmpty")
             hint.setAlignment(Qt.AlignCenter)
             self._list.addWidget(hint)
             return
-        # 表头
+        # 表头（设计稿 .rl-head）—— 同一套网格，保证与数据行列对齐
         head = QFrame()
-        hh = QHBoxLayout(head)
-        hh.setContentsMargins(14, 6, 14, 6)
-        hh.setSpacing(12)
-        for i, c in enumerate(_CATS):
-            lbl = QLabel(c)
-            lbl.setObjectName("SecTitle")
-            if i == 2:
-                hh.addWidget(lbl, 1)
-            else:
-                hh.addWidget(lbl)
+        head.setObjectName("rlHead")
+        g = self._grid()
+        for col, text in enumerate(_COLS):
+            lbl = QLabel(text)
+            lbl.setObjectName("rlHeadCell")
+            g.addWidget(lbl, 0, col)
+        head.setLayout(g)
         self._list.addWidget(head)
-        for meta in metas:
-            self._list.addWidget(self._row(meta, demo=demo))
+        n = len(metas)
+        for i, meta in enumerate(metas):
+            self._list.addWidget(self._row(meta, demo=demo, last=(i == n - 1)))
 
-    def _row(self, meta, demo=False) -> QFrame:
+    @staticmethod
+    def _grid() -> QGridLayout:
+        """共享 4 列网格：列比例 1.35fr : 1fr : 2.4fr : 1.25fr（设计稿）。"""
+        g = QGridLayout()
+        g.setContentsMargins(14, 0, 14, 0)
+        g.setHorizontalSpacing(12)
+        g.setVerticalSpacing(0)
+        for col, stretch in enumerate(_GRID_STRETCH):
+            g.setColumnStretch(col, stretch)
+        return g
+
+    def _row(self, meta, demo=False, last=False) -> QFrame:
         row = QFrame()
-        _prop(row, "card", "report-row")
-        h = QHBoxLayout(row)
-        h.setContentsMargins(14, 12, 14, 12)
-        h.setSpacing(12)
+        row.setObjectName("rlRow")
+        if last:
+            _prop(row, "last", "1")   # 最后一行无下边框（设计稿 .rl-row:last-child）
+        g = self._grid()
+
         time_lbl = QLabel(meta.time)
-        time_lbl.setObjectName("repTime")
-        time_lbl.setFixedWidth(120)
-        h.addWidget(time_lbl)
+        time_lbl.setObjectName("rlTime")
+        g.addWidget(time_lbl, 0, 0)
+
         dev = QLabel(meta.dev)
-        dev.setObjectName("repDev")
-        h.addWidget(dev)
-        s = QLabel(meta.summary or "（无摘要）")
-        s.setObjectName("repSummary")
-        s.setWordWrap(True)
-        h.addWidget(s, 1)
+        dev.setObjectName("rlDev")
+        g.addWidget(dev, 0, 1)
+
+        summary = _ElideLabel(meta.summary or "（无摘要）")
+        summary.setObjectName("rlSummary")
+        summary.setToolTip(meta.summary or "")
+        g.addWidget(summary, 0, 2)
+
+        ops = QHBoxLayout()
+        ops.setSpacing(8)
         view = QPushButton("查看")
         view.setProperty("role", "mini")
         view.setCursor(Qt.PointingHandCursor)
         view.clicked.connect(lambda _=False, m=meta: self._open_paper(m, demo))
-        h.addWidget(view)
+        ops.addWidget(view)
         if not demo:
             dele = QPushButton("删除")
             dele.setProperty("role", "mini")
+            dele.setProperty("danger", "1")   # hover 红色（设计稿 .rl-op.del）
             dele.setCursor(Qt.PointingHandCursor)
             dele.clicked.connect(lambda _=False, m=meta: self._delete(m))
-            h.addWidget(dele)
+            ops.addWidget(dele)
+        ops.addStretch(1)
+        g.addLayout(ops, 0, 3)
+
+        row.setLayout(g)
         return row
 
     def _delete(self, meta):

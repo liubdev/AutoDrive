@@ -280,11 +280,18 @@ QLabel#stepV { color: {mut}; font-size: 12px; }
 
 /* ── 诊断报告 ────────────────────────────── */
 QWidget#page-report { background: {board}; }
-QFrame[card="report-row"] { background: {glass}; border: 1px solid {line}; border-radius: 11px; }
-QLabel#repTime { color: {mut}; font-size: 12px; font-family: "JetBrains Mono", Consolas, monospace; }
-QLabel#repDev { border-radius: 8px; padding: 2px 9px; font-size: 10px; font-weight: 700;
-  background: {acc_soft}; color: {acc}; }
-QLabel#repSummary { color: {tx}; font-size: 13px; }
+/* 列表 = 单一玻璃容器（GlassCard role="glass" 已提供底/边框/圆角），
+   内部表头+数据行用同一网格，行与行之间细下边框分隔（设计稿 .report-list） */
+QFrame#rlHead { background: transparent; border-bottom: 1px solid {line}; }
+QLabel#rlHeadCell { color: {mut}; font-size: 12px; font-weight: 700; }
+QFrame#rlRow { background: transparent; border-bottom: 1px solid {line}; }
+QFrame#rlRow[last="1"] { border-bottom: none; }
+QLabel#rlTime { color: {tx}; font-size: 12px; font-family: "JetBrains Mono", Consolas, monospace; }
+QLabel#rlDev { color: {tx}; font-size: 13px; font-weight: 600; }
+QLabel#rlSummary { color: {mut}; font-size: 13px; }
+QPushButton[role="mini"][danger="1"] { color: {crit}; border-color: {crit_line}; }
+QPushButton[role="mini"][danger="1"]:hover { color: {crit_hi}; border-color: {crit}; background: {crit_soft}; }
+QLabel#rlEmpty { color: {mut}; font-size: 13px; padding: 22px 0; }
 QFrame#paper { background: #FFFFFF; border: 1px solid #DDE1E8; border-radius: 10px; }
 QFrame#paper QLabel { color: #111827; }
 QFrame#paper QLabel#paperH { color: #111827; font-size: 15px; font-weight: 700; }

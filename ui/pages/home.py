@@ -144,7 +144,8 @@ class HomePage(LcsPage):
         super().__init__(parent)
         self._qs = QSettings(ORG, APP)
         self._devices = self._load_devices()
-        self._selected = None
+        # 设计稿 renderDevices()：var isSel = (i===0) —— 第一张设备卡默认选中
+        self._selected = self._devices[0]["id"] if self._devices else None
         self._sel_items = set()
         self._cur_cat = SYMPTOMS[0]["cat"] if SYMPTOMS else ""
         self._build_ui()
@@ -411,7 +412,8 @@ class HomePage(LcsPage):
         dev = self._devices
         self._devices = [d for d in dev if d["id"] != dev_id]
         if self._selected == dev_id:
-            self._selected = None
+            # 设计稿语义：删除选中设备后回退到第一台剩余设备（isSel=(i===0)）
+            self._selected = self._devices[0]["id"] if self._devices else None
         self._save_devices()
         self._rebuild_dev_cards()
         self.devices_changed.emit()
