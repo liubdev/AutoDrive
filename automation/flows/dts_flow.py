@@ -13,8 +13,6 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-import pywinauto.keyboard as kb
-
 from automation.apps.dts import DtsApp
 from automation.flow.engine import FlowStep
 
@@ -194,7 +192,7 @@ def _make_go_back(app: DtsApp):
             auto_id="2", control_type="Button", found_index=0
         )
         if back_btn.exists(timeout=3):
-            back_btn.click_input()
+            app.click_ctrl(back_btn)
             return True
         log.warning("返回按钮(auto_id=2)不存在")
         return False
@@ -250,7 +248,7 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
             auto_id="1", control_type="Button", found_index=0
         )
         if exit_btn.exists(timeout=3):
-            exit_btn.click_input()
+            app.click_ctrl(exit_btn)
 
         # ── 读取保存路径 ──
         app.wait_for_control("1058")
@@ -269,7 +267,7 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
         )
         if exit_btn.exists(timeout=3):
             log.info("点击 csv 路径界面 确认 按钮")
-            exit_btn.click_input()
+            app.click_ctrl(exit_btn)
 
         log.info(f"  CSV: {csv}" if csv else "  CSV: 未找到")
 
@@ -278,7 +276,7 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
             auto_id="2", control_type="Button", found_index=0
         )
         log.info("返回到读取所有数据流")
-        back.click_input()
+        app.click_ctrl(back)
         # 返回主页
         app.wait_for_control("1129")
 
@@ -311,8 +309,8 @@ def _process_flow(app: DtsApp, flow_no: int):
                     auto_id=aid, control_type="CheckBox", found_index=0
                 )
                 if cb.exists(timeout=0.5) and cb.get_toggle_state() == 0:
-                    cb.click_input()
-            right_btn.click_input()
+                    app.click_ctrl(cb)
+            app.click_ctrl(right_btn)
             time.sleep(0.5)
 
     # 保存列表
@@ -320,9 +318,9 @@ def _process_flow(app: DtsApp, flow_no: int):
         auto_id="1013", control_type="Button", found_index=0
     )
     log.info("点击 保存列表 按钮")
-    save_btn.click_input()
+    app.click_ctrl(save_btn)
     time.sleep(0.5)
-    kb.send_keys(f"{file_name}{{ENTER}}")
+    app.send_keys(f"{file_name}{{ENTER}}")
 
     # 处理覆盖弹窗
     for _ in range(8):
@@ -330,19 +328,19 @@ def _process_flow(app: DtsApp, flow_no: int):
             title="是(Y)", control_type="Button", found_index=0
         )
         if btn.exists(timeout=0.5):
-            btn.click_input()
+            app.click_ctrl(btn)
             break
         time.sleep(0.3)
     time.sleep(2)
-    kb.send_keys("{ENTER}{ENTER}")
+    app.send_keys("{ENTER}{ENTER}")
 
     # 载入列表
     load_btn = app.window.child_window(
         auto_id="1118", control_type="Button", found_index=0
     )
     log.info("点击 载入列表 按钮")
-    load_btn.click_input()
-    kb.send_keys(f"{file_name}{{ENTER}}{{ENTER}}{{ENTER}}")
+    app.click_ctrl(load_btn)
+    app.send_keys(f"{file_name}{{ENTER}}{{ENTER}}{{ENTER}}")
     time.sleep(10)
 
     # 返回
@@ -351,6 +349,6 @@ def _process_flow(app: DtsApp, flow_no: int):
     )
     if back_btn.exists(timeout=3):
         log.info("点击 返回 按钮")
-        back_btn.click_input()
+        app.click_ctrl(back_btn)
     # 自定义文件名
-    kb.send_keys(f"{file_name}")
+    app.send_keys(f"{file_name}")

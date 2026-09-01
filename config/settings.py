@@ -18,6 +18,20 @@ class Settings:
     config_file: Path = field(init=False)
     # DTS650 诊断程序路径（可在 data/config.json 覆盖）
     dts_exe: str = r"C:\Program Files (x86)\DTS\DTS20220525\DTS650.exe"
+    # ── DTS 后台自动化 ──────────────────────────────────
+    # True: DTS 全程在后台运行（消息式输入，不抢前台），用户看不到执行过程
+    # False: 回退旧物理输入模式（DTS 在前台，鼠标/键盘直点）
+    dts_background: bool = True
+    # 隐藏方式: "offscreen"(移到屏幕外+去任务栏, 默认) / "normal"(仅靠主窗口置顶遮挡)
+    dts_window_mode: str = "offscreen"
+    # 启动 DTS 时直接最小化（减少启动瞬间闪现）
+    dts_start_minimized: bool = True
+    # 自动化期间主窗口置顶（DTS 始终在下方，最外层）
+    dts_keep_topmost: bool = True
+    # 自动化期间前台被抢则周期性夺回（True=用户不可切走）
+    dts_keep_foreground: bool = True
+    # True: 用计划任务以管理员启动 DTS，避免 UAC 弹窗（需 AutoDrive 同样管理员运行）
+    dts_elevated: bool = False
 
     # --- Automation ---
     default_timeout: int = 10          # default element wait timeout (seconds)

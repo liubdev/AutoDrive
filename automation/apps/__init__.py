@@ -22,6 +22,8 @@ import psutil
 from pywinauto import Application
 from pywinauto.findwindows import find_elements
 
+from automation import background as bg
+
 logger = logging.getLogger("autocar.apps")
 
 
@@ -47,12 +49,15 @@ class BaseApp:
     APP_EXE: str = ""  # e.g. "notepad.exe" 或完整路径
     APP_KEYWORDS: dict = {}  # 窗口匹配提示
     INSTANCE_MULTI: bool = True  # True=多实例, False=单实例
+    BACKGROUND: bool = False     # True=消息式后台输入（不依赖前台，DTS 可后台运行）
 
     def __init__(self):
         self._app: Optional[Application] = None
         self._window = None
         self._pid: Optional[int] = None
         self._launched_by_us = False
+        # 后台模式开关：子类可覆写 BACKGROUND 或在实例化后覆盖
+        self.background = self.BACKGROUND
 
     # ── 公共属性 ──────────────────────────────────────────
 
@@ -374,6 +379,26 @@ class BaseApp:
 
     # ── 键盘操作 ──────────────────────────────────────
 
+    def _hwnd(self) -> int:
+        """当前连接窗口的顶层句柄（后台消息输入的目标窗口）"""
+        try:
+            return int(self.window.handle)
+        except Exception:
+            return 0
+
+    def _send_key_sequence(self, keys: str):
+        """按模式投递按键：后台=消息式定向窗口；前台=物理输入（0.6.3 SendKeys）"""
+        if self.background:
+            hwnd = self._hwnd()
+            if hwnd:
+                bg.send_keys(hwnd, keys)
+                return
+            logger.warning("后台按键但未连接窗口，跳过: %s", keys)
+            return
+        from pywinauto.keyboard import SendKeys
+
+        SendKeys(keys)
+
     def send_enter(self, times: int = 1):
         """
         发送 Enter 键
@@ -387,10 +412,8 @@ class BaseApp:
             app.send_enter()       # 按一次 Enter
             app.send_enter(3)      # 连按 3 次
         """
-        from pywinauto.keyboard import send_keys
-
         for _ in range(times):
-            send_keys("{ENTER}")
+            self._send_key_sequence("{ENTER}")
             time.sleep(0.1)
         logger.info(f"  Enter x{times}")
         return self
@@ -408,32 +431,62 @@ class BaseApp:
             app.send_space()       # 按一次 Space
             app.send_space(3)      # 连按 3 次
         """
-        from pywinauto.keyboard import send_keys
-
         for _ in range(times):
-            send_keys("{SPACE}")
+            self._send_key_sequence("{SPACE}")
             time.sleep(0.1)
         logger.info(f"  Space x{times}")
         return self
 
     def send_keys(self, keys: str):
         """
-        发送任意键盘按键
+        发送任意键盘按键（pywinauto 语法）
 
         Args:
-            keys: pywinauto 键盘语法
-                 例如: "^a" (Ctrl+A), "%{F4}" (Alt+F4), "{TAB 3}"
+            keys: 例如 "^a" (Ctrl+A), "%{F4}" (Alt+F4), "{TAB 3}", 文件名文本
 
         用法:
             app.send_keys("^a")       # Ctrl+A 全选
             app.send_keys("{TAB 2}")  # Tab 两次
             app.send_keys("%{F4}")    # Alt+F4 关闭
         """
-        from pywinauto.keyboard import send_keys
-
-        send_keys(keys)
+        self._send_key_sequence(keys)
         logger.info(f"  Keys: {keys}")
         return self
+
+    def click_ctrl(self, ctrl) -> bool:
+        """点击控件：后台=UIA Invoke（消息式，最小化/屏幕外均有效）；前台=物理点击"""
+        if self.background:
+            return bg.click_ctrl(ctrl, self._hwnd())
+        try:
+            ctrl.click_input()
+            return True
+        except Exception:
+            return False
+
+    def click_at(self, x: int, y: int) -> bool:
+        """按屏幕坐标点击：后台=SendMessage 消息式；前台=物理鼠标"""
+        if self.background:
+            return bg.click_at(self._hwnd(), x, y)
+        try:
+            from pywinauto import mouse
+
+            mouse.click(coords=(x, y))
+            return True
+        except Exception:
+            return False
+
+    def set_focus_bg(self, ctrl) -> bool:
+        """聚焦控件：后台=AttachThreadInput+SetFocus（不抢前台）；前台=UIA set_focus"""
+        if self.background:
+            try:
+                return bg.set_focus(int(ctrl.handle))
+            except Exception:
+                return False
+        try:
+            ctrl.set_focus()
+            return True
+        except Exception:
+            return False
 
     def wait_for_control(self, auto_id: str, control_type: str = "Button",
                          timeout: int = 30) -> bool:

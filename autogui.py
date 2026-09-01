@@ -30,14 +30,19 @@ from config.settings import settings
 
 
 def _setup_logging():
-    """日志只写文件（data/logs/autodrive_YYYYMMDD.log），不输出到控制台 / 界面"""
+    """日志只写文件（data/logs/autodrive_YYYYMMDD.log），不输出到控制台 / 界面。
+
+    FileHandler 挂在根 logger 上 —— 自动化链 (autocar.*) 与产品链 (autodrive.*)
+    都向上传播到根，统一落盘到同一个每日文件。此前挂在 autodrive 上，
+    DTS 自动化 (autocar.apps.dts / autocar.apps / autocar.vision.*) 的日志会全部丢失。
+    """
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s",
                             datefmt="%H:%M:%S")
     fh = logging.FileHandler(
         settings.logs_dir / f"autodrive_{datetime.now():%Y%m%d}.log",
         encoding="utf-8")
     fh.setFormatter(fmt)
-    root = logging.getLogger("autodrive")
+    root = logging.getLogger()  # 根：autodrive.* 与 autocar.* 都落盘
     root.setLevel(getattr(logging, settings.log_level, logging.INFO))
     root.addHandler(fh)
 

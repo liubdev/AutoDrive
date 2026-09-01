@@ -6,18 +6,24 @@ DTS 应用自动化模块
   B. 图片模板匹配 → 无文字图片按钮
   C. 锚点相对比例 → 自绘按钮（非像素偏移）
 
+后台模式（settings.dts_background=True，默认）:
+  DTS 全程在后台运行 —— 输入走 automation.background 消息式投递
+  （UIA Invoke / PostMessage / SendMessage），窗口被移到屏幕外并去掉任务栏，
+  用户看不到任何执行过程。前台模式回退旧物理输入。
+
 锚点控件信息:
   - "当前设置:车下使用" 文本 (auto_id=1185)  → 宽1880 高38
   - "上翻页" 按钮       (auto_id=1013)        → 宽178
 """
 
-import time, logging
+import logging
+import time
 from datetime import datetime
 from typing import Optional
 from pywinauto.findwindows import find_elements
-from pywinauto import mouse
 
 from . import BaseApp
+from automation import background as bg
 from config import settings
 
 logger = logging.getLogger("autocar.apps.dts")
@@ -27,10 +33,29 @@ class DtsApp(BaseApp):
     INSTANCE_MULTI = False
     # 默认路径；实例化时用 settings.dts_exe 覆盖（可在 data/config.json 配置 dts_exe）
     _DEFAULT_EXE = r"C:\Program Files (x86)\DTS\DTS20220525\DTS650.exe"
+    # 默认后台；实例化时从 settings 读取（可在 data/config.json 配置 dts_background=False 回退）
+    BACKGROUND = True
 
     def __init__(self):
         super().__init__()
         self.APP_EXE = getattr(settings, "dts_exe", "") or self._DEFAULT_EXE
+        self.background = getattr(settings, "dts_background", True)
+        self.window_mode = getattr(settings, "dts_window_mode", "offscreen")
+        self.start_minimized = getattr(settings, "dts_start_minimized", True)
+        self.elevated = getattr(settings, "dts_elevated", False)
+
+    # ── 后台窗口隐藏 ──────────────────────────────────
+
+    def _apply_window_hiding(self):
+        """后台模式：把当前连接窗口移到屏幕外 + 去任务栏（功能不受影响）。
+
+        幂等，_reconnect_main 每次连接后都会调用，天然覆盖后续出现的窗口。
+        """
+        if not self.background or self.window_mode != "offscreen":
+            return
+        hwnd = self._hwnd()
+        if hwnd:
+            bg.move_offscreen(hwnd)
 
     # ── 启动确认（UIA 标准控件） ────────────────────
 
@@ -39,7 +64,9 @@ class DtsApp(BaseApp):
             return False
         btn = self.window.child_window(auto_id="1", control_type="Button")
         if btn.exists(timeout=3):
-            btn.click()
+            # 后台：先把确认弹窗也隐藏到屏幕外，用户全程看不到
+            self._apply_window_hiding()
+            self.click_ctrl(btn)
             logger.info("确认")
             return True
         return False
@@ -204,7 +231,7 @@ class DtsApp(BaseApp):
                 auto_id="1131", control_type="Pane", found_index=0
             )
             if pane.exists(timeout=2):
-                pane.set_focus()  # 直接给窗格设焦点
+                self.set_focus_bg(pane)  # 后台=消息式设焦点，不抢前台
                 time.sleep(0.3)
                 logger.info("已聚焦列表窗格")
                 return True
@@ -218,7 +245,7 @@ class DtsApp(BaseApp):
             )
             if pane.exists(timeout=1):
                 r = pane.rectangle()
-                mouse.click(coords=(r.left + 50, r.top + 30))
+                self.click_at(r.left + 50, r.top + 30)
                 time.sleep(0.5)
                 logger.info("已点击列表聚焦(降级)")
                 return True
@@ -238,7 +265,6 @@ class DtsApp(BaseApp):
             所有复制到的内容列表
         """
         import tkinter as tk
-        from pywinauto.keyboard import send_keys
 
         root = tk.Tk()
         root.withdraw()
@@ -248,7 +274,7 @@ class DtsApp(BaseApp):
 
         self._focus_list()
         for _ in range(3):
-            send_keys("{UP}")
+            self.send_keys("{UP}")
             time.sleep(1)
 
         for i in range(max_rows):
@@ -256,7 +282,7 @@ class DtsApp(BaseApp):
                 logger.info("选择下一个选项")
                 # 先点列表聚焦，再 DOWN
                 self._focus_list()
-                send_keys("{DOWN}")
+                self.send_keys("{DOWN}")
                 time.sleep(2)
             # 点击复制按钮
             btn = self.window.child_window(
@@ -266,7 +292,7 @@ class DtsApp(BaseApp):
                 logger.warning(f"复制按钮 (auto_id={copy_btn_id}) 不存在")
                 break
             logger.info("点击 复制按钮")
-            btn.click_input()
+            self.click_ctrl(btn)
             time.sleep(1)
 
             # 复制成功提示
@@ -274,7 +300,7 @@ class DtsApp(BaseApp):
                 auto_id="2", control_type="Button", found_index=0
             )
             logger.info("点击 确认")
-            ok.click_input()
+            self.click_ctrl(ok)
             time.sleep(0.5)
 
             # 读剪贴板
@@ -327,7 +353,7 @@ class DtsApp(BaseApp):
                 r = text.rectangle()
                 target_x = r.left + int(r.width() * rx)
                 target_y = r.bottom + int(r.height() * ry)
-                mouse.click(coords=(target_x, target_y))
+                self.click_at(target_x, target_y)
                 logger.info(f"✓ 点击文本锚点 ({target_x},{target_y})")
                 time.sleep(2)
                 return True
@@ -351,7 +377,7 @@ class DtsApp(BaseApp):
                 r = btn.rectangle()
                 target_x = r.left + int(r.width() * rx)
                 target_y = int(r.top * ry)
-                mouse.click(coords=(target_x, target_y))
+                self.click_at(target_x, target_y)
                 logger.info(f"✓ 点击按钮锚点 ({target_x},{target_y})")
                 time.sleep(2)
                 return True
@@ -370,13 +396,17 @@ class DtsApp(BaseApp):
             for w in wins:
                 try:
                     if w.class_name == "CDTS650MainClass":
-                        return self._connect_by_handle(w.handle, w.process_id)
+                        self._connect_by_handle(w.handle, w.process_id)
+                        self._apply_window_hiding()
+                        return True
                 except Exception:
                     continue
             for w in wins:
                 try:
                     if w.class_name == "#32770" and "DTS" in (w.name or ""):
-                        return self._connect_by_handle(w.handle, w.process_id)
+                        self._connect_by_handle(w.handle, w.process_id)
+                        self._apply_window_hiding()
+                        return True
                 except Exception:
                     continue
             time.sleep(0.5)
@@ -391,7 +421,9 @@ class DtsApp(BaseApp):
                     if w.class_name == "#32770":
                         for child in w.children():
                             if child.name == "确认":
-                                return self._connect_by_handle(w.handle)
+                                self._connect_by_handle(w.handle)
+                                self._apply_window_hiding()
+                                return True
                 except Exception:
                     continue
             time.sleep(0.5)
@@ -399,10 +431,19 @@ class DtsApp(BaseApp):
 
     def ensure_running(self, timeout: int = 30) -> bool:
         if self.connect_existing():
+            self._apply_window_hiding()
             return True
         logger.info(f"启动 DTS: {self.APP_EXE}")
-        import subprocess
+        if self.background and self.elevated:
+            task = bg.launch_elevated(self.APP_EXE)
+            if task is None:
+                logger.warning("计划任务提权启动失败，回退普通启动")
+                bg.launch(self.APP_EXE, minimized=self.start_minimized)
+        elif self.background:
+            bg.launch(self.APP_EXE, minimized=self.start_minimized)
+        else:
+            import subprocess
 
-        proc = subprocess.Popen([self.APP_EXE])
+            subprocess.Popen([self.APP_EXE])
         self._launched_by_us = True
         return self._wait_for_dts_window(timeout)

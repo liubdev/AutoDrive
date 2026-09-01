@@ -152,15 +152,19 @@ class FlowEngine:
             step.attempt = 0
 
         self._emit("flow_start", self)
+        total = len(self.steps)
+        self.log(f"流程开始: 共 {total} 步")
 
         try:
-            for step in self.steps:
+            for i, step in enumerate(self.steps):
                 if self.cancelled:
                     step.status = CANCELLED
                     break
 
                 self.current = step
                 step.status = RUNNING
+                self.log(f"  → 步骤 {i + 1}/{total}: {step.name}")
+                t0 = time.time()
                 self._emit("step_start", step)
 
                 ok = self._run_step(step, verify_app)
@@ -168,11 +172,14 @@ class FlowEngine:
                     step.status = ERROR
                     self._emit("step_error", step)
                     break  # 失败即停止（后续可扩展为继续模式）
+                self.log(f"    ✓ {step.name} 完成 ({time.time() - t0:.1f}s)")
         finally:
             self.done = True
             if self.cancelled:
+                self.log("流程已取消", "warning")
                 self._emit("flow_cancelled", self)
             else:
+                self.log("流程完成")
                 self._emit("flow_done", self)
             self._remove_log_handler()
 

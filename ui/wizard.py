@@ -34,6 +34,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from automation.apps.dts import DtsApp
+from automation import background as bg
 from automation.flow.engine import ERROR, FlowEngine
 from automation.flows.dts_flow import build_dts_flow, make_output_dir
 from ui.appshell import AppShell
@@ -111,6 +112,9 @@ class MainWindow(QMainWindow):
         self._app = None
         self._out_dir = None
         self._report_loader = ReportLoader()
+        # 后台自动化：主窗口置顶 + 前台守卫
+        self._fg_timer = None
+        self._fg_guard_on = False
 
         self._bridge = EngineBridge(self)
         self._ai_bridge = AiBridge(self)
@@ -324,6 +328,17 @@ class MainWindow(QMainWindow):
             return
         self._out_dir = make_output_dir()
         _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
+        from config.settings import settings
+
+        _safe_log(logging.INFO,
+                  "开始 DTS 自动化采集: 后台=%s 窗口模式=%s 最小化=%s 提权=%s",
+                  getattr(settings, "dts_background", True),
+                  getattr(settings, "dts_window_mode", "offscreen"),
+                  getattr(settings, "dts_start_minimized", True),
+                  getattr(settings, "dts_elevated", False))
+
+        # DTS 后台自动化：主窗口置顶 + 前台守卫（收尾在 _on_run_finished 清理）
+        self._start_fg_guard()
 
         self._engine = FlowEngine()
         self._engine.steps = dev["build_flow"](app, self._out_dir)
@@ -389,8 +404,55 @@ class MainWindow(QMainWindow):
         self._pending_auto_ai = False
         self._load_report(advance=False)
 
+    # ── 后台自动化：主窗口置顶 + 前台守卫 ─────────────
+
+    def _start_fg_guard(self):
+        """DTS 采集期间主窗口置顶；前台被抢则周期性夺回（确保程序始终最外层）。
+
+        DTS 已用消息式输入全程后台运行，此守卫只为兜底其激活/系统弹窗抢前台。
+        """
+        self._fg_guard_on = True
+        from config.settings import settings
+
+        _safe_log(logging.INFO,
+                  "启动前台守卫: topmost=%s foreground=%s",
+                  getattr(settings, "dts_keep_topmost", True),
+                  getattr(settings, "dts_keep_foreground", True))
+        if getattr(settings, "dts_keep_topmost", True):
+            bg.set_topmost(int(self.winId()), True)
+        if not getattr(settings, "dts_keep_foreground", True):
+            return
+        if self._fg_timer is None:
+            self._fg_timer = QTimer(self)
+            self._fg_timer.timeout.connect(self._fg_guard_tick)
+        self._fg_timer.start(500)
+
+    def _fg_guard_tick(self):
+        if not self._fg_guard_on:
+            return
+        our = int(self.winId())
+        if bg.is_active(our):
+            return
+        # 前台不是我们 → 夺回；最小化/隐藏时不打扰
+        if self.isVisible() and not self.isMinimized():
+            bg.force_foreground(our)
+
+    def _stop_fg_guard(self):
+        self._fg_guard_on = False
+        _safe_log(logging.INFO, "停止前台守卫")
+        if self._fg_timer is not None:
+            self._fg_timer.stop()
+        from config.settings import settings
+
+        if getattr(settings, "dts_keep_topmost", True):
+            bg.set_topmost(int(self.winId()), False)
+        bg.force_foreground(int(self.winId()))
+
     def _on_run_finished(self):
         self._running = False
+        _safe_log(logging.INFO, "采集流程结束，自动进入 AI 诊断=%s",
+                  self._pending_auto_ai)
+        self._stop_fg_guard()
         self.ai_diag.set_running(False)
         self._dev_status.setText("○ 就绪")
         if self._pending_auto_ai:
