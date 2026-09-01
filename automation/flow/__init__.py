@@ -16,6 +16,7 @@ AutoDrive Flow 流程引擎
 from .engine import (
     FlowEngine,
     FlowStep,
+    FlowStepError,
     PENDING,
     RUNNING,
     DONE,
@@ -26,6 +27,7 @@ from .engine import (
 __all__ = [
     "FlowEngine",
     "FlowStep",
+    "FlowStepError",
     "PENDING",
     "RUNNING",
     "DONE",

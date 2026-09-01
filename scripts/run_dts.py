@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", message="Revert to STA COM threading mode")
 logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
 
 from automation.apps.dts import DtsApp
-from automation.flow.engine import FlowEngine
+from automation.flow.engine import FlowEngine, FlowStepError
 from automation.flows.dts_flow import build_dts_flow, make_output_dir
 
 
@@ -31,13 +31,23 @@ def main():
     log.info(f"  输出目录: {out_dir}")
 
     app = DtsApp()
+    if not app.APP_EXE:
+        log.error("未配置 DTS650 路径（dts_exe）：请在 data/config.json 中填写 "
+                  "dts_exe 为 DTS650 的实际安装路径")
+        sys.exit(1)
     engine = FlowEngine()
     engine.steps = build_dts_flow(app, out_dir)
 
     # 引擎会把所有 Python logging 转发到 log 事件；
     # 控制台输出由上面的 basicConfig 负责，无需额外订阅。
-    engine.run(verify_app=app)
-    app.disconnect()
+    try:
+        engine.run(verify_app=app)
+    except FlowStepError as e:
+        # 任一步骤未完成 → 严格顺序要求：停止继续执行，非零退出
+        log.error("流程中止: %s", e)
+        sys.exit(1)
+    finally:
+        app.disconnect()
     log.info("[完成]")
 
 

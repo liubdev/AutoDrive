@@ -31,14 +31,14 @@ logger = logging.getLogger("autocar.apps.dts")
 
 class DtsApp(BaseApp):
     INSTANCE_MULTI = False
-    # 默认路径；实例化时用 settings.dts_exe 覆盖（可在 data/config.json 配置 dts_exe）
-    _DEFAULT_EXE = r"C:\Program Files (x86)\DTS\DTS20220525\DTS650.exe"
     # 默认后台；实例化时从 settings 读取（可在 data/config.json 配置 dts_background=False 回退）
     BACKGROUND = True
 
     def __init__(self):
         super().__init__()
-        self.APP_EXE = getattr(settings, "dts_exe", "") or self._DEFAULT_EXE
+        # DTS650 路径唯一来源：settings.dts_exe（默认值定义在 config/settings.py，
+        # 首次运行自动生成 data/config.json 模板，可在其中覆盖）
+        self.APP_EXE = settings.dts_exe
         self.background = getattr(settings, "dts_background", True)
         self.window_mode = getattr(settings, "dts_window_mode", "offscreen")
         self.start_minimized = getattr(settings, "dts_start_minimized", True)

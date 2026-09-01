@@ -10,9 +10,10 @@
 验证 —— 用打桩断言"路由到了后台路径"，这正是"可支持后台形态"的关键。
 """
 import os, sys, time
+from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\liubo1\Desktop\AutoDrive")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from PySide6.QtCore import QSettings
 QSettings("AutoDrive", "AutoDrive").clear()

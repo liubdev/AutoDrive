@@ -4,9 +4,10 @@
   111. report 页 prepare_run()/finish_run() 采集中等待态 ↔ 收尾刷新
 """
 import os, sys
+from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\liubo1\Desktop\AutoDrive")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from PySide6.QtWidgets import QApplication, QLabel
 from PySide6.QtCore import QSettings

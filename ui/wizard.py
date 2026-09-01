@@ -315,16 +315,27 @@ class MainWindow(QMainWindow):
 
         app = dev["class"]()
         self._app = app
-        exe = Path(app.APP_EXE or "")
+        if not app.APP_EXE:
+            # 预检失败：dts_exe 完全未配置（代码内无默认路径，必须在 config.json 填写）
+            self._running = False
+            self._cancelled = False
+            self._dev_status.setText("○ 就绪")
+            self.ai_diag.set_running(False)
+            self.ai_diag.show_error(
+                "DTS 自动化无法启动：未配置 DTS650 路径（dts_exe）\n"
+                "请在 data/config.json 中填写 dts_exe 为 DTS650 的实际安装路径后重试")
+            return
+        exe = Path(app.APP_EXE)
         if not exe.is_file():
-            # 预检失败：明确报错，不静默降级演示（区别于"已启动但无数据"）
+            # 预检失败：已配置但文件不存在，明确报错，不静默降级演示
+            # （区别于"已启动但无数据"）
             self._running = False
             self._cancelled = False
             self._dev_status.setText("○ 就绪")
             self.ai_diag.set_running(False)
             self.ai_diag.show_error(
                 f"DTS 自动化无法启动：未找到诊断程序\n{exe}\n"
-                "请确认已安装 DTS650，或在 data/config.json 中配置 dts_exe 路径后重试")
+                "请确认已安装 DTS650，或修正 data/config.json 中的 dts_exe 路径后重试")
             return
         self._out_dir = make_output_dir()
         _safe_log(logging.INFO, "输出目录: %s", self._out_dir)

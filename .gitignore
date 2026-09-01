@@ -20,7 +20,7 @@ build/
 # --- AutoCar runtime ---
 data/logs/
 data/reports/
-data/config.json
+# data/config.json
 
 # --- OS ---
 Thumbs.db

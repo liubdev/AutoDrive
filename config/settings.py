@@ -16,11 +16,8 @@ class Settings:
     logs_dir: Path = field(init=False)
     reports_dir: Path = field(init=False)
     config_file: Path = field(init=False)
-    # DTS650 诊断程序路径（可在 data/config.json 覆盖）
-    dts_exe: str = r"C:\Program Files (x86)\DTS\DTS20220525\DTS650.exe"
+    dts_exe: Optional[str] = None
     # ── DTS 后台自动化 ──────────────────────────────────
-    # True: DTS 全程在后台运行（消息式输入，不抢前台），用户看不到执行过程
-    # False: 回退旧物理输入模式（DTS 在前台，鼠标/键盘直点）
     dts_background: bool = True
     # 窗口形态:
     #   "normal" (默认) — DTS 以普通窗口待在 topmost AutoDrive 后面，不移动不改样式，
@@ -71,6 +68,7 @@ class Settings:
             d.mkdir(parents=True, exist_ok=True)
 
         self._load_user_config()
+        self._ensure_user_config()
 
     def _load_user_config(self):
         """Load user config overrides from JSON file"""
@@ -83,6 +81,30 @@ class Settings:
                         setattr(self, key, value)
             except Exception as e:
                 print(f"[AutoCar] Failed to load config: {e}")
+
+    def _ensure_user_config(self):
+        """首次运行生成 data/config.json 模板 —— 唯一可编辑配置入口。
+
+        只写用户可能改的字段；不写 api_key（真实密钥默认留在 config/settings.py，
+        需要覆盖时手动加入本文件或用环境变量 DEEPSEEK_API_KEY）、不写
+        _dir/config_file/project_root（目录结构由代码推导）。已有文件不覆盖。
+        """
+        if self.config_file.exists():
+            return
+        data = {k: v for k, v in asdict(self).items()
+                if not k.endswith("_dir")
+                and k not in ("config_file", "project_root", "api_key")}
+        data["_comment"] = (
+            "AutoDrive 用户配置。dts_exe 默认未设置 —— 请先在此填写 DTS650 的"
+            "实际安装路径（如 C:\\\\Program Files (x86)\\\\DTS\\\\DTS650.exe），"
+            "否则自动化无法启动。其余字段可选修改以覆盖 config/settings.py 默认值。"
+            "api_key 不在模板中 —— 需要时手动加入此文件或用环境变量 DEEPSEEK_API_KEY。"
+        )
+        try:
+            with open(self.config_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+        except Exception as e:
+            print(f"[AutoCar] 生成配置模板失败: {e}")
 
     def save(self):
         """Save current config to file"""

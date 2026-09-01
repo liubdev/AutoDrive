@@ -11,9 +11,13 @@ AutoDrive 流程引擎
   step_start    ->  (step)
   step_done     ->  (step)
   step_error    ->  (step)
-  flow_done     ->  (engine)     自然完成
+  flow_done     ->  (engine)     自然完成（所有步骤都完成）
   flow_cancelled->  (engine)     被取消
+  flow_error    ->  (FlowStepError) 任一步骤未完成 → 流程中止（run() 同时抛出该异常）
   log           ->  (msg, level) 所有 Python logging 记录转发
+
+严格顺序：只有上一步完成（status == DONE）才执行下一步；任一步骤未完成
+（失败 / 顺序违反）都抛出 FlowStepError 并停止继续执行，绝不发 flow_done。
 
 线程说明:
   engine.run() 是阻塞方法，调用方负责放入后台线程（如 threading.Thread）。
@@ -35,6 +39,17 @@ CANCELLED = "cancelled"
 # 软验证（continue_on_missing）的最长等待：控件确认未出现时不必等满 timeout，
 # 给"慢出现但确实存在"的控件留出机会，同时截断版本漂移控件的空等。
 _SOFT_VERIFY_PROBE = 8
+
+
+class FlowStepError(RuntimeError):
+    """步骤未完成导致流程中止。
+
+    触发条件：
+      - 上一步未完成（status != DONE）时试图进入下一步（严格顺序保证）；
+      - 当前步骤执行失败（动作失败 / 验证未通过且非 continue_on_missing）。
+
+    run() 抛出该异常并停止执行，同时发出 flow_error 事件。
+    """
 
 
 class FlowStep:
@@ -137,9 +152,15 @@ class FlowEngine:
         """
         同步执行所有步骤（阻塞）。调用方应放入后台线程。
 
+        严格顺序：只有上一步完成（status == DONE）才执行下一步；任一步骤未完成
+        （失败 / 顺序违反）立即抛出 FlowStepError 并停止继续执行，不发 flow_done。
+
         Args:
             verify_app: 提供 wait_for_control(auto_id, control_type, timeout)
                         的对象（如 DtsApp），用于步骤验证。
+
+        Raises:
+            FlowStepError: 步骤未完成时抛出（同时发出 flow_error 事件）。
         """
         self.done = False
         self._cancel_event.clear()
@@ -155,10 +176,22 @@ class FlowEngine:
         total = len(self.steps)
         self.log(f"流程开始: 共 {total} 步")
 
+        abort_error = None
         try:
             for i, step in enumerate(self.steps):
                 if self.cancelled:
                     step.status = CANCELLED
+                    break
+
+                # 严格顺序保证：上一步必须已完成（DONE）才能进入下一步。
+                # 否则视为"上一步没有结束"→ 抛出异常、停止继续执行。
+                if i > 0 and self.steps[i - 1].status != DONE:
+                    prev = self.steps[i - 1]
+                    step.status = ERROR
+                    abort_error = FlowStepError(
+                        f"上一步「{prev.name}」未完成（状态={prev.status}），"
+                        f"不能执行下一步「{step.name}」，流程中止"
+                    )
                     break
 
                 self.current = step
@@ -171,17 +204,29 @@ class FlowEngine:
                 if not ok:
                     step.status = ERROR
                     self._emit("step_error", step)
-                    break  # 失败即停止（后续可扩展为继续模式）
+                    if self.cancelled:
+                        break   # 用户已取消 → 按取消语义收尾，不抛异常
+                    abort_error = FlowStepError(
+                        f"步骤「{step.name}」执行失败，流程中止"
+                    )
+                    break
                 self.log(f"    ✓ {step.name} 完成 ({time.time() - t0:.1f}s)")
         finally:
             self.done = True
             if self.cancelled:
                 self.log("流程已取消", "warning")
                 self._emit("flow_cancelled", self)
+            elif abort_error is not None:
+                self.log(f"流程中止: {abort_error}", "error")
+                self._emit("flow_error", abort_error)
             else:
                 self.log("流程完成")
                 self._emit("flow_done", self)
             self._remove_log_handler()
+
+        # 步骤未完成 → 异常抛给调用方（GUI 记日志停止 / CLI 退出非零）
+        if abort_error is not None:
+            raise abort_error
 
     def _run_step(self, step: FlowStep, verify_app) -> bool:
         """执行单个步骤（含验证与重试），返回是否成功"""
