@@ -22,10 +22,14 @@ class Settings:
     # True: DTS 全程在后台运行（消息式输入，不抢前台），用户看不到执行过程
     # False: 回退旧物理输入模式（DTS 在前台，鼠标/键盘直点）
     dts_background: bool = True
-    # 隐藏方式: "offscreen"(移到屏幕外+去任务栏, 默认) / "normal"(仅靠主窗口置顶遮挡)
-    dts_window_mode: str = "offscreen"
-    # 启动 DTS 时直接最小化（减少启动瞬间闪现）
-    dts_start_minimized: bool = True
+    # 窗口形态:
+    #   "normal" (默认) — DTS 以普通窗口待在 topmost AutoDrive 后面，不移动不改样式，
+    #     进程最稳（真机验证：offscreen 移出屏幕+改 toolwindow 样式可能触发老 MFC
+    #     程序自退，DTS 进程消失）
+    #   "offscreen"    — 移到屏幕外+去任务栏，完全隐藏（功能上仍可操作）
+    dts_window_mode: str = "normal"
+    # 启动 DTS 时是否最小化。默认 False：不用最小化，保证进程与窗口状态稳定
+    dts_start_minimized: bool = False
     # 自动化期间主窗口置顶（DTS 始终在下方，最外层）
     dts_keep_topmost: bool = True
     # 自动化期间前台被抢则周期性夺回（True=用户不可切走）

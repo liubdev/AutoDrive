@@ -51,7 +51,7 @@ check("坐标点击: 客户区 lParam 正确", sends[0][3] == (20 << 16) | 10)
 settings.dts_exe = sys.executable  # 真实存在的文件
 app = DtsApp()
 check("DtsApp.background 默认 True", app.background is True)
-check("DtsApp 读取 window_mode/start_minimized/elevated", app.window_mode == "offscreen")
+check("DtsApp 读取 window_mode/start_minimized/elevated", app.window_mode == "normal")
 
 bg_sent, bg_clicks = [], []
 bg.send_keys = lambda hwnd, keys, **kw: (bg_sent.append((hwnd, keys)) or True)
@@ -68,7 +68,8 @@ check("BaseApp.send_keys 后台 → bg.send_keys", bg_sent and bg_sent[-1] == (0
 app.click_ctrl("fake_ctrl")
 check("BaseApp.click_ctrl 后台 → bg.click_ctrl", bg_clicks == [True])
 
-# _apply_window_hiding → move_offscreen（后台+offscreen 模式）
+# _apply_window_hiding → move_offscreen（后台+offscreen 模式，显式切回验证隐藏路径）
+app.window_mode = "offscreen"
 bg._moved = []
 bg.move_offscreen = lambda hwnd: bg._moved.append(hwnd) or True
 app._apply_window_hiding()

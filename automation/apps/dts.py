@@ -435,8 +435,17 @@ class DtsApp(BaseApp):
                 except Exception:
                     pass
             time.sleep(0.5)
-        logger.warning("DTS 主窗口未在 %ds 内出现；期间见过的顶层窗口: %s",
-                       timeout, sorted(seen)[:20] or "（无）")
+        pid = self._find_process()
+        if pid:
+            logger.warning(
+                "DTS 主窗口未在 %ds 内出现；期间见过的顶层窗口: %s；"
+                "（DTS 进程仍在运行 PID=%s → 是窗口/类名匹配问题，进程没死）",
+                timeout, sorted(seen)[:20] or "（无）", pid)
+        else:
+            logger.warning(
+                "DTS 主窗口未在 %ds 内出现；期间见过的顶层窗口: %s；"
+                "（DTS 进程已退出 —— 自动化不杀进程，疑似导航误触或 DTS 自身退出）",
+                timeout, sorted(seen)[:20] or "（无）")
         return False
 
     def _wait_for_dts_window(self, timeout: int = 30):
