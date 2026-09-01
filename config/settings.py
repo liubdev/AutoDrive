@@ -16,6 +16,8 @@ class Settings:
     logs_dir: Path = field(init=False)
     reports_dir: Path = field(init=False)
     config_file: Path = field(init=False)
+    # DTS650 诊断程序路径（可在 data/config.json 覆盖）
+    dts_exe: str = r"C:\Program Files (x86)\DTS\DTS20220525\DTS650.exe"
 
     # --- Automation ---
     default_timeout: int = 10          # default element wait timeout (seconds)

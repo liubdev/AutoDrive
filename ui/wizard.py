@@ -34,7 +34,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from automation.apps.dts import DtsApp
-from automation.flow.engine import FlowEngine
+from automation.flow.engine import ERROR, FlowEngine
 from automation.flows.dts_flow import build_dts_flow, make_output_dir
 from ui.appshell import AppShell
 from ui.lcsdata import DEMO_VEHICLE, DIAG_STEPS, DYN_MSGS, EBS_DTC
@@ -311,13 +311,23 @@ class MainWindow(QMainWindow):
 
         app = dev["class"]()
         self._app = app
+        exe = Path(app.APP_EXE or "")
+        if not exe.is_file():
+            # 预检失败：明确报错，不静默降级演示（区别于"已启动但无数据"）
+            self._running = False
+            self._cancelled = False
+            self._dev_status.setText("○ 就绪")
+            self.ai_diag.set_running(False)
+            self.ai_diag.show_error(
+                f"DTS 自动化无法启动：未找到诊断程序\n{exe}\n"
+                "请确认已安装 DTS650，或在 data/config.json 中配置 dts_exe 路径后重试")
+            return
         self._out_dir = make_output_dir()
         _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
 
         self._engine = FlowEngine()
         self._engine.steps = dev["build_flow"](app, self._out_dir)
         self._wire_engine(self._engine)
-        self._set_phase("ai")
         self.ai_diag.append_dyn("正在与车辆通讯中...")
         self.ai_diag.set_dyn_status("识别中")
         threading.Thread(target=self._run_engine, daemon=True).start()
@@ -364,7 +374,9 @@ class MainWindow(QMainWindow):
         pass
 
     def _on_step_error(self, step):
-        self.ai_diag.append_dyn(f"步骤失败: {step.name}", cls="error")
+        reason = getattr(step, "error", None)
+        msg = f"步骤失败: {step.name}" + (f"（{reason}）" if reason else "")
+        self.ai_diag.append_dyn(msg, cls="error")
 
     def _on_flow_done(self, engine):
         self.ai_diag.append_dyn("数据采集完成，正在整理数据…", cls="done")
@@ -384,9 +396,20 @@ class MainWindow(QMainWindow):
         if self._pending_auto_ai:
             self._pending_auto_ai = False
             self._start_ai_diagnosis(auto=True)
+        elif self._flow_errored():
+            # 流程真实失败：明确报错，不静默降级演示
+            self.ai_diag.show_error(
+                "DTS 自动化流程执行失败，请查看上方步骤状态（未填充演示数据）")
         else:
-            # 无真机 / 采集空 → 演示降级
+            # 流程成功但无数据（真机但采集为空） → 演示降级
             self._run_demo_diagnosis("未检测到诊断数据，已填充演示数据")
+
+    def _flow_errored(self) -> bool:
+        """流程是否曾出现步骤失败（区别于「成功但无数据」）"""
+        eng = self._engine
+        if eng is None:
+            return False
+        return any(getattr(s, "status", "") == ERROR for s in eng.steps)
 
     # ── 报告加载 → ai-diagn 页 ───────────────────
 
