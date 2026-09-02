@@ -32,7 +32,7 @@ user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
 # ── 常量 ──────────────────────────────────────────────
-WM_KEYDOWN, WM_KEYUP, WM_CHAR = 0x0100, 0x0101, 0x0102
+WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SETTEXT = 0x0100, 0x0101, 0x0102, 0x000C
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP = 0x0200, 0x0201, 0x0202
 MK_LBUTTON = 0x0001
 WM_BM_CLICK = 0x00F5            # BM_CLICK：程序化触发标准按钮（不依赖 UIA/命中测试）
@@ -207,6 +207,19 @@ def window_title(hwnd: int) -> str:
 def window_exists(hwnd: int) -> bool:
     """窗口句柄是否仍有效（IsWindow）—— 等文件/确认弹窗关闭用它判断已销毁"""
     return bool(hwnd and user32.IsWindow(hwnd))
+
+
+def set_text(hwnd: int, text: str) -> bool:
+    """直接设置 Edit 文本，避免消息式 Ctrl+A 被当成普通字符。"""
+    if not hwnd:
+        return False
+    try:
+        user32.SendMessageW(hwnd, WM_SETTEXT, 0, text)
+        logger.info("设置文本 %r → 控件0x%X", text, hwnd)
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("设置文本失败 %r → 控件0x%X: %s", text, hwnd, e)
+        return False
 
 
 def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,

@@ -8,6 +8,7 @@ CSV 转换：DTS 导出的长表 [参数,值,单位,参考] → spec 期望的�
 """
 
 import csv
+import io
 import json
 import logging
 import re
@@ -25,6 +26,17 @@ MAX_CELLS = 4000
 _HEX_SUFFIX = re.compile(r"^[0-9A-F]{1,2}\s+")
 
 _NOTICE = "（未填写）"
+
+
+def _read_text_compat(path: Path) -> str:
+    """兼容读取 DTS 文本导出：UTF-8/UTF-16/GB18030。"""
+    data = path.read_bytes()
+    for enc in ("utf-8-sig", "gb18030", "utf-16", "utf-16-le", "utf-16-be"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 # ── 故障码 ──────────────────────────────────────
@@ -51,7 +63,7 @@ def supported_stream_set(report) -> set:
     if out_dir:
         for p in sorted(out_dir.glob("DataFlow_List_*.txt")):
             try:
-                for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                for line in _read_text_compat(p).splitlines():
                     line = line.strip()
                     if line:
                         names.add(line)
@@ -74,16 +86,16 @@ def _read_long_csv(path: Path) -> list:
     """读取长表 CSV → [(name, value, unit), ...]，跳过表头行"""
     rows = []
     try:
-        with open(path, encoding="utf-8-sig", errors="replace", newline="") as f:
-            for r in csv.reader(f):
-                if not r:
-                    continue
-                name = (r[0] or "").strip()
-                if not name or name.lower().startswith(("参数", "name", "信号", "项")):
-                    continue
-                value = r[1].strip() if len(r) > 1 else ""
-                unit = r[2].strip() if len(r) > 2 else ""
-                rows.append((name, value, unit))
+        f = io.StringIO(_read_text_compat(path), newline="")
+        for r in csv.reader(f):
+            if not r:
+                continue
+            name = (r[0] or "").strip()
+            if not name or name.lower().startswith(("参数", "name", "信号", "项")):
+                continue
+            value = r[1].strip() if len(r) > 1 else ""
+            unit = r[2].strip() if len(r) > 2 else ""
+            rows.append((name, value, unit))
     except Exception as e:
         log.warning("读取 CSV %s 失败: %s", path, e)
     return rows

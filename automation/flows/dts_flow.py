@@ -90,6 +90,17 @@ def _desktop_dir() -> Path:
     return Path.home() / "Desktop"
 
 
+def _read_text_compat(path: Path) -> str:
+    """读取 DTS 导出的文本，兼容 UTF-8/UTF-16/GB18030。"""
+    data = path.read_bytes()
+    for enc in ("utf-8-sig", "gb18030", "utf-16", "utf-16-le", "utf-16-be"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def _copy_dataflow_list(out_dir: Path, flow_no: int, desktop: Path = None) -> None:
     """DTS 把 DataFlow_List_N.txt 默认存到桌面 → 拷回 out_dir（AI 支持清单/数据流数据源）。
 
@@ -99,8 +110,11 @@ def _copy_dataflow_list(out_dir: Path, flow_no: int, desktop: Path = None) -> No
     src = (desktop if desktop is not None else _desktop_dir()) / fname
     try:
         if src.exists():
-            shutil.copy2(src, out_dir / fname)
-            log.info("  ✓ 数据流列表已拷入: %s", out_dir / fname)
+            dst = out_dir / fname
+            text = _read_text_compat(src)
+            dst.write_text(text, encoding="utf-8-sig")
+            src.write_text(text, encoding="utf-8-sig")
+            log.info("  ✓ 数据流列表已转为 UTF-8 并拷入: %s", dst)
         else:
             log.warning("  桌面未找到 %s（DTS 保存目录可能不是桌面）", src)
     except Exception as e:  # noqa: BLE001
@@ -135,12 +149,14 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     steps.append(FlowStep("一键进入",
                           action=lambda: app.one_click_enter(),
                           verify={"auto_id": "6"}, timeout=20,
+                          retry=2,
                           continue_on_missing=False))
 
     # ── 第4步: 点击进入系统 ──
     steps.append(FlowStep("点击进入系统",
                           action=lambda: app.enter_system(),
                           verify={"auto_id": "1046"}, timeout=20,
+                          retry=2,
                           continue_on_missing=False))
 
     # ── 第5步: 发动机系统诊断 ──

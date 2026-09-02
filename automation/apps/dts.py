@@ -120,7 +120,13 @@ class DtsApp(BaseApp):
     def one_click_enter(self, timeout: int = 30) -> bool:
         if not self._reconnect_main(timeout):
             return False
-        return self._click_image_btn(rx=0.573, ry=0.178)
+        return self._click_until_control(
+            name="一键进入",
+            click=lambda: self._click_image_btn(rx=0.573, ry=0.178),
+            verify_auto_id="6",
+            attempts=3,
+            verify_timeout=5,
+        )
 
     # ── 点击进入系统 ──
     # 锚点: "当前设置:车下使用" 文本 (auto_id=1185)  宽1880 高38
@@ -129,7 +135,13 @@ class DtsApp(BaseApp):
     def enter_system(self, timeout: int = 30) -> bool:
         if not self._reconnect_main(timeout):
             return False
-        return self._click_below_text(auto_id="1185", rx=0.066, ry=1.66)
+        return self._click_until_control(
+            name="点击进入系统",
+            click=lambda: self._click_below_text(auto_id="1185", rx=0.066, ry=1.66),
+            verify_auto_id="1046",
+            attempts=3,
+            verify_timeout=5,
+        )
 
     # ── 发动机系统诊断（选项已默认选中，直接 Enter） ──
 
@@ -480,30 +492,138 @@ class DtsApp(BaseApp):
         return 0
 
     def wait_dts_dialog_by_title(self, title_keywords, wait: float = 8) -> int:
-        """按 DTS 进程和标题等待顶层 #32770 弹窗，不依赖系统前台窗口。
+        """按标题等待顶层 #32770 文件弹窗，不依赖系统前台窗口。
 
         保存/载入列表弹窗肉眼可见时，AutoDrive 可能仍保持 topmost/foreground。
-        这里直接枚举 DTS 进程的顶层对话框，避免为了找 Edit 把焦点切回主窗口。
+        文件弹窗也可能由 DTS 子进程创建，ProcessId 不等于主窗口 self.pid。
+        这里直接枚举顶层对话框并读取 TitleBar.Value，避免误按 PID 过滤掉弹窗。
         """
         if isinstance(title_keywords, str):
             title_keywords = [title_keywords]
         deadline = time.time() + wait
         while time.time() < deadline:
-            for w in find_elements(backend="uia", top_level_only=True):
-                try:
-                    title = w.name or ""
-                    if (self.pid
-                            and w.process_id == self.pid
-                            and w.class_name == "#32770"
-                            and any(k in title for k in title_keywords)):
-                        logger.info("检测到 DTS 文件对话框 0x%X title=%r",
-                                    w.handle, title)
-                        return int(w.handle)
-                except Exception:
-                    continue
+            hwnd = self._find_top_level_dialog_by_title(title_keywords)
+            if hwnd:
+                return hwnd
+            hwnd = self._find_nested_dialog_by_title(title_keywords)
+            if hwnd:
+                return hwnd
             time.sleep(0.25)
         logger.warning("DTS 文件对话框未在 %.1fs 内出现，标题关键字=%s",
                        wait, title_keywords)
+        return 0
+
+    def _title_matches(self, titles: list, title_keywords) -> bool:
+        return any(k in title for k in title_keywords for title in titles)
+
+    def _find_top_level_dialog_by_title(self, title_keywords) -> int:
+        """查顶层 #32770 弹窗。"""
+        for w in find_elements(backend="uia", top_level_only=True):
+            try:
+                if w.class_name != "#32770":
+                    continue
+                hwnd = int(w.handle)
+                titles = self._dialog_titles(hwnd, w)
+                if self._title_matches(titles, title_keywords):
+                    logger.info("检测到顶层 DTS 文件对话框 0x%X pid=%s title=%r",
+                                hwnd, w.process_id, titles)
+                    return hwnd
+            except Exception:
+                continue
+        return 0
+
+    def _find_nested_dialog_by_title(self, title_keywords) -> int:
+        """查 DTS 主窗口子树里的 TitleBar，再回溯到所属 #32770 对话框。"""
+        hwnd = self._hwnd()
+        if not hwnd:
+            return 0
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=hwnd)
+            titlebars = root.descendants(control_type="TitleBar")
+        except Exception:
+            return 0
+        for titlebar in titlebars:
+            try:
+                titles = self._control_titles(titlebar)
+                if not self._title_matches(titles, title_keywords):
+                    continue
+                dlg = self._ancestor_dialog_handle(titlebar)
+                if dlg:
+                    logger.info("检测到嵌套 DTS 文件对话框 0x%X title=%r",
+                                dlg, titles)
+                    return dlg
+            except Exception:
+                continue
+        return 0
+
+    def _control_titles(self, ctrl) -> list:
+        titles = []
+        for getter in (
+            lambda: ctrl.legacy_properties().get("Value", ""),
+            ctrl.window_text,
+        ):
+            try:
+                title = getter()
+                if title:
+                    titles.append(title)
+            except Exception:
+                pass
+        return list(dict.fromkeys(titles))
+
+    def _ancestor_dialog_handle(self, ctrl) -> int:
+        """从 TitleBar 向上找 class=#32770 或 control_type=Dialog 的祖先。"""
+        cur = ctrl
+        for _ in range(8):
+            try:
+                cur = cur.parent()
+                info = cur.element_info
+                cls = getattr(info, "class_name", "") or ""
+                ctype = getattr(info, "control_type", "") or ""
+                if cls == "#32770" or ctype == "Dialog":
+                    return int(cur.handle)
+            except Exception:
+                break
+        return 0
+
+    def _dialog_titles(self, hwnd: int, element=None) -> list:
+        """收集 #32770 对话框标题：顶层 name/window text + 子 TitleBar.Value。"""
+        titles = []
+        try:
+            name = getattr(element, "name", "") if element is not None else ""
+            if name:
+                titles.append(name)
+        except Exception:
+            pass
+        try:
+            title = bg.window_title(hwnd)
+            if title:
+                titles.append(title)
+        except Exception:
+            pass
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=hwnd)
+            titlebar = root.child_window(auto_id="TitleBar", found_index=0)
+            if titlebar.exists(timeout=0.2):
+                titles.extend(self._control_titles(titlebar))
+        except Exception:
+            pass
+        return list(dict.fromkeys(titles))
+
+    def _dialog_first_edit_handle(self, hwnd: int) -> int:
+        """取文件对话框内第一个 Edit 句柄；失败则返回 0。"""
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=hwnd)
+            edit = root.child_window(control_type="Edit", found_index=0)
+            if edit.exists(timeout=0.5):
+                return int(edit.handle)
+        except Exception:
+            pass
         return 0
 
     def _wait_dialog_gone(self, dlg: int, wait: float = 6) -> bool:
@@ -549,20 +669,27 @@ class DtsApp(BaseApp):
 
         全程只作用于 DTS 文件对话框，不再切焦点到主窗口或强找 Edit：
           1. 按 DTS 进程 + 标题等待「保存列表/载入列表」顶层弹窗
-          2. 保留弹窗默认焦点，直接 ^a+文件名 → ENTER 触发默认键
+          2. 优先直接设置 Edit 文本，再 ENTER 触发默认键
           3. 覆盖/确认 #32770 若出现 → 回车默认按钮（最多 max_times 次）
           4. 等文件对话框真正关闭再返回（避免后续按键打向正在关闭的弹窗）
 
         mode: "save" 保存列表 / "load" 载入列表（仅用于日志文案）。
         """
         tag = "保存" if mode == "save" else "载入"
-        title_keywords = ["保存列表", "另存为"] if mode == "save" else ["载入列表", "打开"]
+        title_keywords = ["保存列表"] if mode == "save" else ["载入列表"]
         dlg = self.wait_dts_dialog_by_title(title_keywords, wait=timeout)
         if not dlg:
             logger.warning("%s文件对话框未出现 —— 跳过输入", tag)
             return False
-        logger.info("%s文件对话框直接输入文件名 %s 并回车（保持默认焦点）", tag, file_name)
-        bg.send_keys(dlg, f"^a{file_name}{{ENTER}}")
+        logger.info("%s文件对话框输入文件名 %s 并回车", tag, file_name)
+        edit = self._dialog_first_edit_handle(dlg)
+        if edit:
+            logger.info("%s文件对话框使用 Edit 0x%X 接收文件名", tag, edit)
+            bg.set_text(edit, file_name)
+            bg.send_keys(dlg, "{ENTER}", target_hwnd=edit)
+        else:
+            # 兜底：系统文件框通常默认选中文件名输入框，直接键入即可。
+            bg.send_keys(dlg, f"{file_name}{{ENTER}}")
         # 覆盖/确认（是否出现不确定：出现才回车默认按钮）
         self.confirm_enter_if_dialog(wait=2.5, max_times=3, exclude={dlg})
         # 等文件对话框真正关闭
@@ -691,6 +818,39 @@ class DtsApp(BaseApp):
     #  自绘按钮定位（跨分辨率，相对比例）
     # ═══════════════════════════════════════════════
 
+    def _control_exists(self, auto_id: str, control_type: str = "Button",
+                        timeout: float = 1) -> bool:
+        try:
+            ctrl = self.window.child_window(
+                auto_id=auto_id, control_type=control_type, found_index=0
+            )
+            return bool(ctrl.exists(timeout=timeout))
+        except Exception:
+            return False
+
+    def _click_until_control(self, name: str, click, verify_auto_id: str,
+                             verify_control_type: str = "Button",
+                             attempts: int = 3,
+                             verify_timeout: float = 5) -> bool:
+        """点击自绘区域后用目标控件验证页面跳转，未跳转则重连并重试。"""
+        if self._control_exists(verify_auto_id, verify_control_type, timeout=0.5):
+            logger.info("%s: 目标控件 %s 已存在，跳过点击", name, verify_auto_id)
+            return True
+        for i in range(attempts):
+            if i > 0:
+                logger.warning("%s: 点击后未进入目标页面，重连后重试 %d/%d",
+                               name, i + 1, attempts)
+                self._reconnect_main(timeout=5)
+            if not click():
+                continue
+            if self._control_exists(
+                    verify_auto_id, verify_control_type, timeout=verify_timeout):
+                logger.info("%s: 点击生效，目标控件 %s 已出现", name, verify_auto_id)
+                return True
+        logger.warning("%s: 连续 %d 次点击后目标控件 %s 仍未出现",
+                       name, attempts, verify_auto_id)
+        return False
+
     # ── 文本锚点 ──────────────────────────────────
 
     def _click_below_text(self, auto_id: str, rx: float, ry: float) -> bool:
@@ -726,14 +886,17 @@ class DtsApp(BaseApp):
 
         Args:
             rx: 水平偏移 = 目标X到按钮左边缘 / 按钮宽度
-            ry: 垂直偏移 = 目标Y / 内容区底部Y
+            ry: 垂直偏移 = 目标Y / 内容区高度
         """
         try:
             btn = self.window.child_window(auto_id="1013", control_type="Button")
             if btn.exists(timeout=3):
                 r = btn.rectangle()
+                wr = self.window.rectangle()
+                content_top = wr.top
+                content_bottom = r.top
                 target_x = r.left + int(r.width() * rx)
-                target_y = int(r.top * ry)
+                target_y = content_top + int((content_bottom - content_top) * ry)
                 self.click_at(target_x, target_y)
                 logger.info(f"✓ 点击按钮锚点 ({target_x},{target_y})")
                 time.sleep(2)

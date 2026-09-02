@@ -11,6 +11,7 @@
 """
 
 import csv
+import io
 import json
 import logging
 import re
@@ -25,6 +26,17 @@ DTC_RE = re.compile(r"[PBCU][0-9A-F]{4}")
 
 # 轻量严重度推断：命中这些关键词判"严重"，否则"一般"
 _CRIT_KEYWORDS = ("失火", "爆震", "停缸", "断油", "ecu", "安全")
+
+
+def _read_text_compat(path: Path) -> str:
+    """兼容读取 DTS 文本导出：UTF-8/UTF-16/GB18030。"""
+    data = path.read_bytes()
+    for enc in ("utf-8-sig", "gb18030", "utf-16", "utf-16-le", "utf-16-be"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 @dataclass
@@ -82,7 +94,7 @@ class ReportLoader:
         try:
             p = out_dir / "version_info.txt"
             if p.exists():
-                return p.read_text(encoding="utf-8", errors="replace").strip()
+                return _read_text_compat(p).strip()
         except Exception as e:
             log.warning("read version failed: %s", e)
         return ""
@@ -92,7 +104,7 @@ class ReportLoader:
         try:
             if not path.exists():
                 return faults
-            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            for line in _read_text_compat(path).splitlines():
                 line = line.strip()
                 if not line:
                     continue
@@ -117,7 +129,7 @@ class ReportLoader:
                 return flows
             # 无可用 CSV：退回参数列表文件（只有名称）
             for p in sorted(out_dir.glob("DataFlow_List_*.txt")):
-                for name in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                for name in _read_text_compat(p).splitlines():
                     name = name.strip()
                     if name and not any(f.name == name for f in flows):
                         flows.append(DataFlowItem(name=name))
@@ -128,17 +140,17 @@ class ReportLoader:
     def _parse_csv(self, path: Path) -> list:
         items = []
         try:
-            with open(path, encoding="utf-8-sig", errors="replace", newline="") as f:
-                for row in csv.reader(f):
-                    if not row:
-                        continue
-                    name = (row[0] or "").strip()
-                    if not name or name.lower().startswith(("参数", "name", "信号")):
-                        continue
-                    value = row[1].strip() if len(row) > 1 else ""
-                    unit = row[2].strip() if len(row) > 2 else ""
-                    ref = row[3].strip() if len(row) > 3 else ""
-                    items.append(DataFlowItem(name=name, value=value, unit=unit, ref=ref))
+            f = io.StringIO(_read_text_compat(path), newline="")
+            for row in csv.reader(f):
+                if not row:
+                    continue
+                name = (row[0] or "").strip()
+                if not name or name.lower().startswith(("参数", "name", "信号")):
+                    continue
+                value = row[1].strip() if len(row) > 1 else ""
+                unit = row[2].strip() if len(row) > 2 else ""
+                ref = row[3].strip() if len(row) > 3 else ""
+                items.append(DataFlowItem(name=name, value=value, unit=unit, ref=ref))
         except Exception as e:
             log.warning("parse csv failed: %s", e)
             return []
