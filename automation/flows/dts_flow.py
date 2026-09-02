@@ -194,9 +194,9 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
                           action=_make_nav_data_flow(app)))
 
     # ── 第15步: 循环读取数据流 ──
-    # steps.append(FlowStep("循环读取数据流",
-    #                       action=_make_data_flow_loop(app, out_dir, max_flows),
-    #                       timeout=1200))
+    steps.append(FlowStep("循环读取数据流",
+                          action=_make_data_flow_loop(app, out_dir, max_flows),
+                          timeout=1200))
 
     return steps
 
@@ -361,43 +361,28 @@ def _process_flow(app: DtsApp, flow_no: int):
             app.click_ctrl(right_btn)
             time.sleep(0.5)
 
-    # 保存列表
+    # 保存列表 → 文件对话框驱动（点击按钮 → 等弹窗出现并聚焦文件名输入框 →
+    # ^a+文件名+ENTER 触发默认键保存(S) → 覆盖确认在弹窗里回车默认按钮）
     save_btn = app.window.child_window(
         auto_id="1013", control_type="Button", found_index=0
     )
     log.info("点击 保存列表 按钮")
-    app.click_ctrl(save_btn)
-    time.sleep(0.5)
-    # 保存弹窗出现 → 先激活窗口让弹窗获得焦点，再聚焦文件名输入框，最后输入
-    app.focus_active_window()
-    if not app.focus_edit_in_dialog(timeout=4):
-        log.warning("保存对话框文件名输入框未出现/聚焦失败")
-    app.send_keys(f"^a{file_name}{{ENTER}}")
+    if app.click_ctrl(save_btn):
+        app.drive_file_dialog(file_name, mode="save", timeout=10)
+    else:
+        log.warning("点击 保存列表 按钮失败")
 
-    # 处理覆盖弹窗
-    for _ in range(8):
-        btn = app.window.child_window(
-            title="是(Y)", control_type="Button", found_index=0
-        )
-        if btn.exists(timeout=0.5):
-            app.click_ctrl(btn)
-            break
-        time.sleep(0.3)
-    time.sleep(2)
-    app.send_keys("{ENTER}{ENTER}")
-
-    # 载入列表
+    # 载入列表 → 文件对话框驱动（同上；不再向主窗盲发多余 ENTER）
     load_btn = app.window.child_window(
         auto_id="1118", control_type="Button", found_index=0
     )
     log.info("点击 载入列表 按钮")
-    app.click_ctrl(load_btn)
-    # 载入(打开)弹窗 → 先激活窗口 + 聚焦文件名输入框，再输入
-    app.focus_active_window()
-    if not app.focus_edit_in_dialog(timeout=4):
-        log.warning("载入对话框文件名输入框未出现/聚焦失败")
-    app.send_keys(f"^a{file_name}{{ENTER}}{{ENTER}}{{ENTER}}")
-    time.sleep(10)
+    if app.click_ctrl(load_btn):
+        app.drive_file_dialog(file_name, mode="load", timeout=10)
+        # 载入后 DTS 渲染已载入的数据流列表需要一点时间（原写死 sleep(10)）
+        time.sleep(5)
+    else:
+        log.warning("点击 载入列表 按钮失败")
 
     # 返回
     back_btn = app.window.child_window(

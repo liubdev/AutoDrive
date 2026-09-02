@@ -35,6 +35,8 @@ kernel32 = ctypes.windll.kernel32
 WM_KEYDOWN, WM_KEYUP, WM_CHAR = 0x0100, 0x0101, 0x0102
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP = 0x0200, 0x0201, 0x0202
 MK_LBUTTON = 0x0001
+WM_BM_CLICK = 0x00F5            # BM_CLICK：程序化触发标准按钮（不依赖 UIA/命中测试）
+GA_ROOT = 2                     # GetAncestor 标志：取根（最顶层）窗口
 
 SW_HIDE, SW_SHOW, SW_MINIMIZE, SW_RESTORE = 0, 5, 6, 9
 HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
@@ -99,6 +101,8 @@ _declare("GetClassNameW", ctypes.c_int,
          [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int])
 _declare("GetWindowTextW", ctypes.c_int,
          [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int])
+_declare("IsWindow", wintypes.BOOL, [wintypes.HWND])
+_declare("GetAncestor", wintypes.HWND, [wintypes.HWND, wintypes.UINT])
 
 
 # ═══════════════════════════════════════════════════════
@@ -200,6 +204,11 @@ def window_title(hwnd: int) -> str:
         return ""
 
 
+def window_exists(hwnd: int) -> bool:
+    """窗口句柄是否仍有效（IsWindow）—— 等文件/确认弹窗关闭用它判断已销毁"""
+    return bool(hwnd and user32.IsWindow(hwnd))
+
+
 def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,
               target_hwnd: int = None) -> bool:
     """向 DTS 窗口投递键盘输入（pywinauto 语法，如 '{DOWN 2}{ENTER}' / 文件名）。
@@ -288,24 +297,69 @@ def click_at(hwnd_top: int, sx: int, sy: int) -> bool:
     return True
 
 
-def click_ctrl(ctrl, hwnd_top: int = None) -> bool:
-    """后台点击 pywinauto 控件：UIA Invoke 优先，失败降级为坐标消息点击。
+def _ctrl_hwnd(ctrl) -> int:
+    """取 pywinauto 控件的真实窗口句柄（wrapper.handle，降级 element_info.handle）"""
+    try:
+        return int(ctrl.handle)
+    except Exception:          # noqa: BLE001
+        try:
+            return int(ctrl.wrapper_object().element_info.handle)
+        except Exception:      # noqa: BLE001
+            return 0
 
-    标准 MFC 按钮 (ButtonWrapper) 走 InvokePattern，最小化/屏幕外均有效。
+
+def _click_bm(ctrl) -> bool:
+    """BM_CLICK 直达按钮窗口句柄 —— 标准按钮最稳的点击方式。
+
+    不走 UIA（MSAA Proxy / 自绘按钮的 InvokePattern 常失败），不做窗口命中
+    测试（坐标点击对独立 #32770 弹窗里的控件、以及自绘控件经常点不中），
+    直接把 BM_CLICK 消息发给按钮自身，由按钮 wndproc 触发 BN_CLICKED。
+    仅当目标窗口是 Button 类才发 —— 避免"整窗/容器句柄被误当成按钮发出
+    点击却无人响应"造成的假成功。
+    """
+    hwnd = _ctrl_hwnd(ctrl)
+    if not hwnd or not user32.IsWindow(hwnd):
+        return False
+    if "button" not in (window_class(hwnd) or "").lower():
+        logger.debug("非 Button 类(0x%X)跳过 BM_CLICK", hwnd)
+        return False
+    user32.SendMessageW(hwnd, WM_BM_CLICK, 0, 0)
+    logger.info("BM_CLICK 按钮 0x%X 成功", hwnd)
+    return True
+
+
+def click_ctrl(ctrl, hwnd_top: int = None) -> bool:
+    """后台点击 pywinauto 控件，降级链：UIA Invoke → BM_CLICK → 坐标消息点击。
+
+      1. UIA Invoke       标准控件（有 InvokePattern），最小化/屏幕外均有效
+      2. BM_CLICK         标准按钮直达按钮句柄 —— MSAA Proxy / 自绘按钮 Invoke
+                          失败时的主用路径，不经 UIA 也不做命中测试
+      3. 坐标消息点击     最后手段；以控件真实顶层窗口（GetAncestor GA_ROOT，
+                          而非调用方传入的可能失效的主窗）为命中目标 —— 弹窗内
+                          控件的坐标在弹窗自己的窗口树里找，不再错误落到主窗口
     """
     try:
-        ctrl.click()          # UIA Invoke —— 后台安全
+        ctrl.click()          # 1. UIA Invoke —— 后台安全
         logger.debug("UIA Invoke 点击成功")
         return True
     except Exception:          # noqa: BLE001
         pass
     try:
-        r = ctrl.rectangle()
+        if _click_bm(ctrl):   # 2. BM_CLICK 直达按钮句柄
+            return True
+    except Exception:          # noqa: BLE001
+        pass
+    try:
+        r = ctrl.rectangle()  # 3. 坐标降级：真实顶层窗口（GA_ROOT）
         cx, cy = (r.left + r.width() // 2), (r.top + r.height() // 2)
-        if hwnd_top is None:
-            hwnd_top = ctrl.wrapper_object().element_info.handle or int(ctrl.handle)
-        logger.info("UIA Invoke 失败 → 降级坐标点击 (%d,%d)", cx, cy)
-        return click_at(hwnd_top, cx, cy)
+        hwnd = _ctrl_hwnd(ctrl)
+        top = int(user32.GetAncestor(hwnd, GA_ROOT)) if hwnd else 0
+        if not top:
+            top = hwnd_top or 0
+        if top:
+            logger.info("UIA/BM_CLICK 失败 → 坐标点击 (%d,%d) 顶层0x%X", cx, cy, top)
+            return click_at(top, cx, cy)
+        raise RuntimeError("无可用窗口句柄")
     except Exception:          # noqa: BLE001
         try:
             aid = ctrl.element_info.automation_id
@@ -316,8 +370,8 @@ def click_ctrl(ctrl, hwnd_top: int = None) -> bool:
             geo = f"@{r.left},{r.top} {r.width()}x{r.height()}"
         except Exception:
             geo = ""
-        logger.warning("控件点击失败（UIA Invoke 与坐标降级均失败） auto_id=%r %s",
-                       aid, geo)
+        logger.warning("控件点击失败（UIA Invoke / BM_CLICK / 坐标降级均失败） "
+                       "auto_id=%r %s", aid, geo)
         return False
 
 

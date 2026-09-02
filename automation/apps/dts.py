@@ -33,6 +33,8 @@ class DtsApp(BaseApp):
     INSTANCE_MULTI = False
     # 默认后台；实例化时从 settings 读取（可在 data/config.json 配置 dts_background=False 回退）
     BACKGROUND = True
+    # 窗口连接自愈：同一失效期内两次重连的最小间隔（秒），防重连风暴
+    _RECONNECT_COOLDOWN = 3.0
 
     def __init__(self):
         super().__init__()
@@ -43,6 +45,46 @@ class DtsApp(BaseApp):
         self.window_mode = getattr(settings, "dts_window_mode", "offscreen")
         self.start_minimized = getattr(settings, "dts_start_minimized", True)
         self.elevated = getattr(settings, "dts_elevated", False)
+        # 上一次自动重连时刻（0=从未）；窗口自愈用
+        self._last_reconnect_at = 0.0
+
+    # ── 窗口连接自愈 ──────────────────────────────────
+
+    def _window_stale(self, win) -> bool:
+        """self._window 包装是否失效（UIA 连接断开后元素句柄抛 COM -2147220991）。
+
+        只对真实 pywinauto 包装判失效（类上有 element_info/handle）；测试桩/伪造
+        对象没有这两个名字则直接放行、不重连。用 dir() 而非 hasattr —— pywinauto
+        的 element_info 可能是取值时抛错的 property，hasattr 会把它误判为不存在。
+        """
+        try:
+            if "element_info" not in dir(win) and "handle" not in dir(win):
+                return False
+        except Exception:      # noqa: BLE001
+            return True
+        try:
+            _ = win.handle
+            return False
+        except Exception:      # noqa: BLE001
+            return True
+
+    @property
+    def window(self):
+        """顶层窗口包装；后台模式下检测到连接失效时自动重连 DTS 主窗口。
+
+        DTS 长时间交互 + 模态弹窗循环后，pywinauto 缓存的 UIA 元素可能失效
+        （handle 访问抛 0x80040201），此后所有 child_window/exists/click 都会崩
+        —— 旧代码直接中止流程。这里在每次取 window 时做轻量存活检查（读 handle），
+        失效即调 _reconnect_main 重建连接，用冷却时间避免同一失效期内的重连风暴。
+        """
+        win = super().window
+        if (win is not None and self.background and self._window_stale(win)
+                and time.time() - self._last_reconnect_at >= self._RECONNECT_COOLDOWN):
+            self._last_reconnect_at = time.time()
+            logger.warning("窗口连接失效（UIA 句柄失效），自动重连 DTS 主窗口…")
+            self._reconnect_main(timeout=8)
+            win = self._window
+        return win
 
     # ── 后台窗口隐藏 ──────────────────────────────────
 
@@ -395,6 +437,100 @@ class DtsApp(BaseApp):
             time.sleep(0.5)
         logger.warning("弹窗文件名输入框未在 %ds 内出现/聚焦", timeout)
         return False
+
+    # ── 文件对话框（保存/载入列表）驱动 ───────────────
+
+    def _fg_dialog(self) -> int:
+        """前台若是 DTS 的 #32770 弹窗（≠主窗）返回其句柄，否则 0。
+
+        覆盖/确认弹窗与保存/载入文件对话框都是独立顶层 #32770（不在主窗
+        self.window 子树里）—— 在主窗口里按 title="是(Y)" 搜索永远找不到。
+        一律改用前台窗口判断：谁在前台，谁就是当前要处理的弹窗。
+        """
+        fg = bg.active_window()
+        if (fg and fg != self._hwnd() and self.pid
+                and bg.window_pid(fg) == self.pid
+                and bg.window_class(fg) == "#32770"):
+            return fg
+        return 0
+
+    def wait_fg_dialog(self, wait: float = 2.5) -> int:
+        """等一个 DTS #32770 弹窗成为前台（确认/覆盖弹窗出现），返回句柄。
+
+        文件对话框回车后，覆盖/确认弹窗可能延迟几百毫秒才弹出 —— 这里轮询
+        前台窗口，超时返回 0（表示没有弹窗出现，不需要额外处理）。
+        """
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            dlg = self._fg_dialog()
+            if dlg:
+                return dlg
+            time.sleep(0.25)
+        return 0
+
+    def _wait_dialog_gone(self, dlg: int, wait: float = 6) -> bool:
+        """等弹窗销毁或前台离开它（回车关闭后）；返回是否已关闭/离开。"""
+        if not dlg:
+            return True
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            if not bg.window_exists(dlg):
+                return True
+            fg = bg.active_window()
+            if fg and fg != dlg:
+                return True
+            time.sleep(0.3)
+        return False
+
+    def confirm_enter_if_dialog(self, wait: float = 2.5, max_times: int = 3) -> bool:
+        """文件对话框回车后：若又出现 DTS #32770 弹窗（覆盖/确认）则回车默认按钮。
+
+        旧代码在主窗口 self.window 里搜按钮 title="是(Y)" —— 覆盖确认是独立顶层
+        弹窗，主窗子树里永远没有，导致 8 轮空等后只能盲打 {ENTER}{ENTER}（状态
+        失步的根源之一）。这里改为看前台：出现 #32770 才回车（默认按钮通常正是
+        "是(Y)"），回车后等它关闭，再处理下一个；最多 max_times 个连续弹窗。
+        """
+        handled = False
+        for _ in range(max_times):
+            dlg = self.wait_fg_dialog(wait=wait)
+            if not dlg:
+                break
+            handled = True
+            logger.info("检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 回车默认按钮",
+                        dlg, bg.window_class(dlg), bg.window_title(dlg))
+            # 弹窗与主窗同线程：send_keys 会投到弹窗当前焦点控件（默认按钮）
+            self.send_keys("{ENTER}")
+            self._wait_dialog_gone(dlg, wait=4)
+        return handled
+
+    def drive_file_dialog(self, file_name: str, mode: str = "save",
+                          timeout: float = 12) -> bool:
+        """驱动「保存列表/载入列表」文件对话框（点击按钮打开弹窗后调用）。
+
+        全程只作用于前台弹窗，不再向主窗口盲发多余按键：
+          1. 激活 DTS 主窗 → 等文件对话框出现并聚焦文件名输入框（auto_id=1001）
+          2. 输入框内 ^a+文件名 → ENTER 触发默认键（保存(S)/打开(O)）
+          3. 覆盖/确认 #32770 若出现 → 回车默认按钮（最多 max_times 次）
+          4. 等文件对话框真正关闭再返回（避免后续按键打向正在关闭的弹窗）
+
+        mode: "save" 保存列表 / "load" 载入列表（仅用于日志文案）。
+        """
+        tag = "保存" if mode == "save" else "载入"
+        self.focus_active_window()
+        if not self.focus_edit_in_dialog(timeout=min(timeout, 8)):
+            logger.warning("%s文件对话框未出现/文件名输入框未聚焦 —— 跳过输入", tag)
+            return False
+        dlg = self._dts_foreground_window()          # 此刻前台应为文件对话框
+        if not (dlg and bg.window_class(dlg) == "#32770"):
+            dlg = 0                                  # 前台不是弹窗（主窗）→ 不追踪关闭
+        logger.info("%s文件对话框输入文件名 %s 并回车（默认键）", tag, file_name)
+        self.send_keys(f"^a{file_name}{{ENTER}}")
+        # 覆盖/确认（是否出现不确定：出现才回车默认按钮）
+        self.confirm_enter_if_dialog(wait=2.5, max_times=3)
+        # 等文件对话框真正关闭
+        if dlg:
+            self._wait_dialog_gone(dlg, wait=8)
+        return True
 
     def _focus_list(self):
         """
