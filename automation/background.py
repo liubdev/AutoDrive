@@ -95,6 +95,10 @@ _declare("GetWindowLongPtrW", ctypes.c_ssize_t,
 _declare("SetWindowLongPtrW", ctypes.c_ssize_t,
          [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t])
 _declare("MapVirtualKeyW", wintypes.UINT, [wintypes.UINT, wintypes.UINT])
+_declare("GetClassNameW", ctypes.c_int,
+         [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int])
+_declare("GetWindowTextW", ctypes.c_int,
+         [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int])
 
 
 # ═══════════════════════════════════════════════════════
@@ -170,6 +174,30 @@ def window_pid(hwnd: int) -> int:
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return int(pid.value)
+
+
+def window_class(hwnd: int) -> str:
+    """窗口类名（GetClassNameW），诊断用；无效句柄返回空串"""
+    if not hwnd:
+        return ""
+    buf = ctypes.create_unicode_buffer(256)
+    try:
+        user32.GetClassNameW(hwnd, buf, 256)
+        return buf.value or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def window_title(hwnd: int) -> str:
+    """窗口标题（GetWindowTextW），诊断用；无效句柄返回空串"""
+    if not hwnd:
+        return ""
+    buf = ctypes.create_unicode_buffer(512)
+    try:
+        n = user32.GetWindowTextW(hwnd, buf, 512)
+        return (buf.value[:n] if n else "") or ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,
@@ -279,7 +307,17 @@ def click_ctrl(ctrl, hwnd_top: int = None) -> bool:
         logger.info("UIA Invoke 失败 → 降级坐标点击 (%d,%d)", cx, cy)
         return click_at(hwnd_top, cx, cy)
     except Exception:          # noqa: BLE001
-        logger.warning("控件点击失败（UIA Invoke 与坐标降级均失败）")
+        try:
+            aid = ctrl.element_info.automation_id
+        except Exception:
+            aid = ""
+        try:
+            r = ctrl.rectangle()
+            geo = f"@{r.left},{r.top} {r.width()}x{r.height()}"
+        except Exception:
+            geo = ""
+        logger.warning("控件点击失败（UIA Invoke 与坐标降级均失败） auto_id=%r %s",
+                       aid, geo)
         return False
 
 

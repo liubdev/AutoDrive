@@ -23,6 +23,7 @@ log = logging.getLogger("autodrive.ai.chain")
 
 # ── 结果类型 ────────────────────────────────────
 
+
 @dataclass
 class CollectionPlan:
     streams: list = field(default_factory=list)
@@ -44,6 +45,7 @@ class Locatability:
 
 
 # ── 容错解析 ────────────────────────────────────
+
 
 def extract_json(text: str) -> dict:
     """从模型输出中稳健提取 JSON 对象。
@@ -108,6 +110,7 @@ def _as_bool(v) -> bool:
 
 # ── 编排 ────────────────────────────────────────
 
+
 class AiDiagnosticChain:
     def __init__(self, client=None, knowledge=None):
         self.client = client or DeepSeekClient()
@@ -129,13 +132,15 @@ class AiDiagnosticChain:
         supported = None
         if report is not None:
             from ai.context import supported_stream_set
+
             supported = supported_stream_set(report)
         if supported:
             bad = [s for s in streams if s not in supported]
             streams = [s for s in streams if s in supported]
             if bad:
-                log.info("stage1 过滤 %d 个不在支持清单中的数据流：%s",
-                         len(bad), bad[:10])
+                log.info(
+                    "stage1 过滤 %d 个不在支持清单中的数据流：%s", len(bad), bad[:10]
+                )
         return CollectionPlan(
             streams=streams,
             working_conditions=str(parsed.get("working_conditions") or ""),
@@ -174,8 +179,14 @@ class AiDiagnosticChain:
 
     # -- 全链路 --------------------------------------------------
 
-    def run_full(self, report, symptom: str, notes: str = "",
-                 out_dir=None, callbacks: dict = None) -> dict:
+    def run_full(
+        self,
+        report,
+        symptom: str,
+        notes: str = "",
+        out_dir=None,
+        callbacks: dict = None,
+    ) -> dict:
         """
         顺序执行三阶段，结果持久化到 out_dir。
 
@@ -219,7 +230,11 @@ class AiDiagnosticChain:
 
         # 阶段3（注入阶段1/2 的中间结果）
         slots3 = dict(slots2)
-        verdict = "原地数据足以定位故障，无需路试" if loc.is_locatable else "原地数据不足，需要路试或在特定工况下复测"
+        verdict = (
+            "原地数据足以定位故障，无需路试"
+            if loc.is_locatable
+            else "原地数据不足，需要路试或在特定工况下复测"
+        )
         slots3["result_analysis"] = f"{verdict}：{loc.reason}"
         slots3["root_cause_analysis"] = loc.reason
         slots3["data_stream_status"] = plan.working_conditions
@@ -230,8 +245,12 @@ class AiDiagnosticChain:
         if out_dir:
             self._persist(out_dir, plan, loc, report_data)
 
-        return {"plan": plan, "locatability": loc, "report": report_data,
-                "out_dir": out_dir}
+        return {
+            "plan": plan,
+            "locatability": loc,
+            "report": report_data,
+            "out_dir": out_dir,
+        }
 
     @staticmethod
     def _persist(out_dir, plan, loc, report_data):
@@ -240,16 +259,26 @@ class AiDiagnosticChain:
         out_dir.mkdir(parents=True, exist_ok=True)
         files = {
             "ai_collection_plan.json": json.dumps(
-                {"streams": plan.streams,
-                 "working_conditions": plan.working_conditions},
-                ensure_ascii=False, indent=2),
+                {
+                    "streams": plan.streams,
+                    "working_conditions": plan.working_conditions,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
             "ai_locatability.json": json.dumps(
                 {"is_locatable": loc.is_locatable, "reason": loc.reason},
-                ensure_ascii=False, indent=2),
+                ensure_ascii=False,
+                indent=2,
+            ),
             "ai_report.json": json.dumps(
-                {"overallConclusion": report_data.get("overallConclusion", ""),
-                 "diagnosisList": report_data.get("diagnosisList", [])},
-                ensure_ascii=False, indent=2),
+                {
+                    "overallConclusion": report_data.get("overallConclusion", ""),
+                    "diagnosisList": report_data.get("diagnosisList", []),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
         }
         for name, content in files.items():
             try:

@@ -195,7 +195,106 @@ class DtsApp(BaseApp):
             time.sleep(0.5)
 
         logger.warning("获取列表第一项失败: 未找到 ListItem")
+        # self._dump_list_pane()   # 诊断：列表窗格 1131 是否存在 / 有无 ListItem
         return None
+
+    # ── 调试：UI 状态快照（dts_debug_pause_nav 开启时由流程调用） ──
+
+    def dump_ui_state(self, tag: str = "") -> None:
+        """打印当前 DTS 界面状态快照，用于判断导航/按键焦点是否正确。
+
+        前台窗口 → 键盘焦点 → 主窗浅层 UIA 树 → 数据流列表窗格。
+        仅在 settings.dts_debug_pause_nav 开启时调用（一次性，允许秒级耗时）；
+        任何一步失败都不中断，保证快照总是能完整打出。
+        """
+        logger.info("════ UI 状态快照: %s ════", tag)
+        try:
+            fg = bg.active_window()
+            logger.info("前台窗口 0x%X pid=%s 类=%s 标题=%r",
+                        fg, bg.window_pid(fg), bg.window_class(fg), bg.window_title(fg)[:60])
+            hwnd = self._hwnd()
+            logger.info("DTS 主窗口 0x%X 类=%s 标题=%r",
+                        hwnd, bg.window_class(hwnd), bg.window_title(hwnd)[:60])
+            focus = bg._get_focus(hwnd)
+            logger.info("键盘焦点 0x%X 类=%s 标题=%r  （类==主窗口类 → 无子控件持焦点，DOWN/ENTER 会落到窗框上）",
+                        focus, bg.window_class(focus), bg.window_title(focus)[:60])
+            self._dump_window_tree(hwnd)
+            self._dump_list_pane()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("UI 状态快照异常: %s", e)
+        logger.info("════ 状态快照结束 ════")
+
+    def _dump_window_tree(self, hwnd: int, max_depth: int = 4, max_nodes: int = 80) -> None:
+        """浅层 UIA 树 dump：看当前停在哪个界面、有没有列表/菜单控件。"""
+        if not hwnd:
+            logger.info("  （未连接主窗口，跳过 UIA 树）")
+            return
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=hwnd)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("  UIA 树获取失败: %s", e)
+            return
+        nodes = [0]
+
+        def _walk(ctrl, depth):
+            if nodes[0] >= max_nodes:
+                return
+            try:
+                info = ctrl.element_info
+                ct = getattr(info, "control_type", "") or ""
+                aid = getattr(info, "automation_id", "") or ""
+                cls = getattr(info, "class_name", "") or ""
+                name = (ctrl.window_text() or "").strip()[:30]
+                r = ctrl.rectangle()
+                geo = f"({r.left},{r.top} {r.width()}x{r.height()})" if r.width() else ""
+                logger.info("  %s%s type=%s auto_id=%r class=%s %s 名称=%r",
+                            "  " * depth, depth, ct, aid, cls, geo, name)
+                nodes[0] += 1
+            except Exception:
+                pass
+            if depth < max_depth:
+                try:
+                    for c in ctrl.children()[:25]:
+                        _walk(c, depth + 1)
+                except Exception:
+                    pass
+
+        try:
+            for c in root.children()[:25]:
+                _walk(c, 1)
+        except Exception:
+            pass
+        if nodes[0] == 0:
+            logger.info("  （UIA 树为空 —— 当前界面可能不是标准控件）")
+
+    def _dump_list_pane(self) -> None:
+        """诊断数据流列表窗格 auto_id=1131：是否存在、可见性、子控件类型统计。"""
+        if not self.window:
+            logger.info("  （未连接窗口，跳过列表窗格诊断）")
+            return
+        try:
+            pane = self.window.child_window(
+                auto_id="1131", control_type="Pane", found_index=0
+            )
+            if not pane.exists(timeout=1):
+                logger.info("  列表窗格 auto_id=1131 不存在 —— 当前界面没有可读列表（可能不在数据流菜单）")
+                return
+            r = pane.rectangle()
+            kids = pane.children()
+            types = {}
+            for c in kids[:30]:
+                try:
+                    t = c.element_info.control_type
+                    types[t] = types.get(t, 0) + 1
+                except Exception:
+                    pass
+            li = pane.descendants(control_type="ListItem")
+            logger.info("  列表窗格 1131: %sx%s @(%s,%s) 直接子控件 %d 个 类型=%s ListItem=%d 个",
+                        r.width(), r.height(), r.left, r.top, len(kids), types or "{}", len(li))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("  列表窗格诊断失败: %s", e)
 
     # ── 提取 CSV 路径 ──────────────────────────────
 
@@ -235,7 +334,7 @@ class DtsApp(BaseApp):
             return bool(self.window and self.window.set_focus())
         hwnd = self._hwnd()
         if hwnd and bg.force_foreground(hwnd):
-            time.sleep(0.15)
+            time.sleep(1)
             return True
         return False
 
@@ -293,7 +392,7 @@ class DtsApp(BaseApp):
             for hwnd in self._edit_search_windows():
                 if hwnd and self._focus_first_edit(hwnd):
                     return True
-            time.sleep(0.3)
+            time.sleep(0.5)
         logger.warning("弹窗文件名输入框未在 %ds 内出现/聚焦", timeout)
         return False
 
@@ -315,7 +414,7 @@ class DtsApp(BaseApp):
             )
             if pane.exists(timeout=2):
                 self.set_focus_bg(pane)  # 后台=消息式设焦点，不抢前台
-                time.sleep(0.3)
+                time.sleep(0.5)
                 logger.info("已聚焦列表窗格")
                 return pane
         except Exception as e:

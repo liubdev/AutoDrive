@@ -15,6 +15,7 @@ from datetime import datetime
 
 from automation.apps.dts import DtsApp
 from automation.flow.engine import FlowStep
+from config import settings
 
 log = logging.getLogger("autodrive.flow.dts")
 
@@ -134,38 +135,38 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     steps.append(FlowStep("一键进入",
                           action=lambda: app.one_click_enter(),
                           verify={"auto_id": "6"}, timeout=20,
-                          continue_on_missing=True))
+                          continue_on_missing=False))
 
     # ── 第4步: 点击进入系统 ──
     steps.append(FlowStep("点击进入系统",
                           action=lambda: app.enter_system(),
                           verify={"auto_id": "1046"}, timeout=20,
-                          continue_on_missing=True))
+                          continue_on_missing=False))
 
     # ── 第5步: 发动机系统诊断 ──
     steps.append(FlowStep("发动机系统诊断",
                           action=lambda: app.send_enter(),
                           verify={"auto_id": "1058"}, timeout=20,
-                          continue_on_missing=True))
+                          continue_on_missing=False))
 
     # ── 第6步: 直接进入 ──
     steps.append(FlowStep("直接进入",
                           action=lambda: app.send_space(),
                           verify={"auto_id": "1046"}, timeout=20,
-                          continue_on_missing=True))
+                          continue_on_missing=False))
 
     # ── 第7步: 发动机2.0T ──
     steps.append(FlowStep("发动机2.0T",
                           action=lambda: app.send_enter(),
                           verify={"auto_id": "1058"}, timeout=20,
-                          continue_on_missing=True))
+                          continue_on_missing=False))
 
     # ── 第8步: 空格 + 版本信息 ──
     steps.append(FlowStep("空格确认",
                           action=lambda: app.send_space(timeout=15),
                           verify={"auto_id": "1202", "control_type": "Edit"},
                           timeout=20,
-                          continue_on_missing=True))
+                          continue_on_missing=False))
 
     # ── 第9步: 保存版本信息 ──
     steps.append(FlowStep("保存版本信息",
@@ -193,9 +194,9 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
                           action=_make_nav_data_flow(app)))
 
     # ── 第15步: 循环读取数据流 ──
-    steps.append(FlowStep("循环读取数据流",
-                          action=_make_data_flow_loop(app, out_dir, max_flows),
-                          timeout=1200))
+    # steps.append(FlowStep("循环读取数据流",
+    #                       action=_make_data_flow_loop(app, out_dir, max_flows),
+    #                       timeout=1200))
 
     return steps
 
@@ -239,6 +240,7 @@ def _make_go_back(app: DtsApp):
         )
         if back_btn.exists(timeout=3):
             app.click_ctrl(back_btn)
+            time.sleep(0.5)
             return True
         log.warning("返回按钮(auto_id=2)不存在")
         return False
@@ -248,9 +250,9 @@ def _make_go_back(app: DtsApp):
 def _make_nav_data_flow(app: DtsApp):
     def action():
         app.send_keys("{DOWN 2}{ENTER}")
-        time.sleep(0.2)
+        time.sleep(0.5)
         app.send_keys("{DOWN 6}{ENTER}")
-        time.sleep(0.2)
+        time.sleep(0.5)
         app.send_keys("{ENTER}")
         return True
     return action
@@ -329,7 +331,7 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
         # 切换到下一个数据流: DOWN + ENTER
         log.info("切换到下一个数据流...")
         app.send_keys("{DOWN}")
-        time.sleep(0.2)
+        time.sleep(0.5)
         app.send_keys("{ENTER}")
         # 确定
         app.wait_for_control("1028")
