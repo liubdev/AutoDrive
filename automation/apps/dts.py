@@ -454,18 +454,56 @@ class DtsApp(BaseApp):
             return fg
         return 0
 
-    def wait_fg_dialog(self, wait: float = 2.5) -> int:
+    def wait_fg_dialog(self, wait: float = 2.5, exclude=None) -> int:
         """等一个 DTS #32770 弹窗成为前台（确认/覆盖弹窗出现），返回句柄。
 
         文件对话框回车后，覆盖/确认弹窗可能延迟几百毫秒才弹出 —— 这里轮询
-        前台窗口，超时返回 0（表示没有弹窗出现，不需要额外处理）。
+        前台窗口，前台不是 DTS 时降级枚举 DTS 顶层弹窗；超时返回 0。
         """
+        exclude = set(exclude or [])
         deadline = time.time() + wait
         while time.time() < deadline:
             dlg = self._fg_dialog()
-            if dlg:
+            if dlg and dlg not in exclude:
                 return dlg
+            for w in find_elements(backend="uia", top_level_only=True):
+                try:
+                    hwnd = int(w.handle)
+                    if (hwnd not in exclude
+                            and self.pid
+                            and w.process_id == self.pid
+                            and w.class_name == "#32770"):
+                        return hwnd
+                except Exception:
+                    continue
             time.sleep(0.25)
+        return 0
+
+    def wait_dts_dialog_by_title(self, title_keywords, wait: float = 8) -> int:
+        """按 DTS 进程和标题等待顶层 #32770 弹窗，不依赖系统前台窗口。
+
+        保存/载入列表弹窗肉眼可见时，AutoDrive 可能仍保持 topmost/foreground。
+        这里直接枚举 DTS 进程的顶层对话框，避免为了找 Edit 把焦点切回主窗口。
+        """
+        if isinstance(title_keywords, str):
+            title_keywords = [title_keywords]
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            for w in find_elements(backend="uia", top_level_only=True):
+                try:
+                    title = w.name or ""
+                    if (self.pid
+                            and w.process_id == self.pid
+                            and w.class_name == "#32770"
+                            and any(k in title for k in title_keywords)):
+                        logger.info("检测到 DTS 文件对话框 0x%X title=%r",
+                                    w.handle, title)
+                        return int(w.handle)
+                except Exception:
+                    continue
+            time.sleep(0.25)
+        logger.warning("DTS 文件对话框未在 %.1fs 内出现，标题关键字=%s",
+                       wait, title_keywords)
         return 0
 
     def _wait_dialog_gone(self, dlg: int, wait: float = 6) -> bool:
@@ -482,7 +520,8 @@ class DtsApp(BaseApp):
             time.sleep(0.3)
         return False
 
-    def confirm_enter_if_dialog(self, wait: float = 2.5, max_times: int = 3) -> bool:
+    def confirm_enter_if_dialog(self, wait: float = 2.5, max_times: int = 3,
+                                exclude=None) -> bool:
         """文件对话框回车后：若又出现 DTS #32770 弹窗（覆盖/确认）则回车默认按钮。
 
         旧代码在主窗口 self.window 里搜按钮 title="是(Y)" —— 覆盖确认是独立顶层
@@ -491,45 +530,43 @@ class DtsApp(BaseApp):
         "是(Y)"），回车后等它关闭，再处理下一个；最多 max_times 个连续弹窗。
         """
         handled = False
+        exclude = set(exclude or [])
         for _ in range(max_times):
-            dlg = self.wait_fg_dialog(wait=wait)
+            dlg = self.wait_fg_dialog(wait=wait, exclude=exclude)
             if not dlg:
                 break
             handled = True
             logger.info("检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 回车默认按钮",
                         dlg, bg.window_class(dlg), bg.window_title(dlg))
-            # 弹窗与主窗同线程：send_keys 会投到弹窗当前焦点控件（默认按钮）
-            self.send_keys("{ENTER}")
+            bg.send_keys(dlg, "{ENTER}")
             self._wait_dialog_gone(dlg, wait=4)
+            exclude.add(dlg)
         return handled
 
     def drive_file_dialog(self, file_name: str, mode: str = "save",
                           timeout: float = 12) -> bool:
         """驱动「保存列表/载入列表」文件对话框（点击按钮打开弹窗后调用）。
 
-        全程只作用于前台弹窗，不再向主窗口盲发多余按键：
-          1. 激活 DTS 主窗 → 等文件对话框出现并聚焦文件名输入框（auto_id=1001）
-          2. 输入框内 ^a+文件名 → ENTER 触发默认键（保存(S)/打开(O)）
+        全程只作用于 DTS 文件对话框，不再切焦点到主窗口或强找 Edit：
+          1. 按 DTS 进程 + 标题等待「保存列表/载入列表」顶层弹窗
+          2. 保留弹窗默认焦点，直接 ^a+文件名 → ENTER 触发默认键
           3. 覆盖/确认 #32770 若出现 → 回车默认按钮（最多 max_times 次）
           4. 等文件对话框真正关闭再返回（避免后续按键打向正在关闭的弹窗）
 
         mode: "save" 保存列表 / "load" 载入列表（仅用于日志文案）。
         """
         tag = "保存" if mode == "save" else "载入"
-        self.focus_active_window()
-        if not self.focus_edit_in_dialog(timeout=min(timeout, 8)):
-            logger.warning("%s文件对话框未出现/文件名输入框未聚焦 —— 跳过输入", tag)
+        title_keywords = ["保存列表", "另存为"] if mode == "save" else ["载入列表", "打开"]
+        dlg = self.wait_dts_dialog_by_title(title_keywords, wait=timeout)
+        if not dlg:
+            logger.warning("%s文件对话框未出现 —— 跳过输入", tag)
             return False
-        dlg = self._dts_foreground_window()          # 此刻前台应为文件对话框
-        if not (dlg and bg.window_class(dlg) == "#32770"):
-            dlg = 0                                  # 前台不是弹窗（主窗）→ 不追踪关闭
-        logger.info("%s文件对话框输入文件名 %s 并回车（默认键）", tag, file_name)
-        self.send_keys(f"^a{file_name}{{ENTER}}")
+        logger.info("%s文件对话框直接输入文件名 %s 并回车（保持默认焦点）", tag, file_name)
+        bg.send_keys(dlg, f"^a{file_name}{{ENTER}}")
         # 覆盖/确认（是否出现不确定：出现才回车默认按钮）
-        self.confirm_enter_if_dialog(wait=2.5, max_times=3)
+        self.confirm_enter_if_dialog(wait=2.5, max_times=3, exclude={dlg})
         # 等文件对话框真正关闭
-        if dlg:
-            self._wait_dialog_gone(dlg, wait=8)
+        self._wait_dialog_gone(dlg, wait=8)
         return True
 
     def _focus_list(self):

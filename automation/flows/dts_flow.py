@@ -361,8 +361,8 @@ def _process_flow(app: DtsApp, flow_no: int):
             app.click_ctrl(right_btn)
             time.sleep(0.5)
 
-    # 保存列表 → 文件对话框驱动（点击按钮 → 等弹窗出现并聚焦文件名输入框 →
-    # ^a+文件名+ENTER 触发默认键保存(S) → 覆盖确认在弹窗里回车默认按钮）
+    # 保存列表 → 文件对话框驱动（点击按钮 → 等 DTS 弹窗标题 →
+    # 保持默认焦点输入文件名+ENTER → 覆盖确认在弹窗里回车默认按钮）
     save_btn = app.window.child_window(
         auto_id="1013", control_type="Button", found_index=0
     )
@@ -391,7 +391,3 @@ def _process_flow(app: DtsApp, flow_no: int):
     if back_btn.exists(timeout=3):
         log.info("点击 返回 按钮")
         app.click_ctrl(back_btn)
-    # 自定义文件名（先聚焦输入框，避免打进主窗口空处）
-    app.focus_active_window()
-    app.focus_edit_in_dialog(timeout=4)
-    app.send_keys(f"{file_name}")
