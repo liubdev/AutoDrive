@@ -144,6 +144,12 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     Returns:
         list[FlowStep]
     """
+    def enter_system_after_settle() -> bool:
+        """给“一键进入”的页面切换留出稳定时间，再执行下一次点击。"""
+        log.info("一键进入后等待 1.0s，再点击进入系统")
+        time.sleep(1)
+        return app.enter_system()
+
     steps = []
 
     # ── 第1步: 启动 ──
@@ -165,7 +171,7 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
 
     # ── 第4步: 点击进入系统 ──
     steps.append(FlowStep("点击进入系统",
-                          action=lambda: app.enter_system(),
+                          action=enter_system_after_settle,
                           verify={"auto_id": "1046"}, timeout=20,
                           retry=2,
                           continue_on_missing=False))
