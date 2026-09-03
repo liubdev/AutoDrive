@@ -12,6 +12,7 @@ import time
 import logging
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 from automation.apps.dts import DtsApp
 from automation.flow.engine import FlowStep
@@ -101,7 +102,12 @@ def _read_text_compat(path: Path) -> str:
     return data.decode("utf-8", errors="replace")
 
 
-def _copy_dataflow_list(out_dir: Path, flow_no: int, desktop: Path = None) -> None:
+def _copy_dataflow_list(
+    out_dir: Path,
+    flow_no: int,
+    desktop: Path = None,
+    min_mtime: Optional[float] = None,
+) -> bool:
     """DTS 把 DataFlow_List_N.txt 默认存到桌面 → 拷回 out_dir（AI 支持清单/数据流数据源）。
 
     desktop 参数供单测注入临时目录；默认真实桌面。
@@ -110,15 +116,20 @@ def _copy_dataflow_list(out_dir: Path, flow_no: int, desktop: Path = None) -> No
     src = (desktop if desktop is not None else _desktop_dir()) / fname
     try:
         if src.exists():
+            if min_mtime is not None and src.stat().st_mtime < min_mtime:
+                log.warning("  数据流列表文件不是本轮新保存的: %s", src)
+                return False
             dst = out_dir / fname
             text = _read_text_compat(src)
             dst.write_text(text, encoding="utf-8-sig")
             src.write_text(text, encoding="utf-8-sig")
             log.info("  ✓ 数据流列表已转为 UTF-8 并拷入: %s", dst)
+            return True
         else:
             log.warning("  桌面未找到 %s（DTS 保存目录可能不是桌面）", src)
     except Exception as e:  # noqa: BLE001
         log.warning("  复制数据流列表失败: %s", e)
+    return False
 
 
 def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
@@ -288,25 +299,37 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
     → 保存列表 → 载入列表 → 返回 → 下一个
     """
     prev_item = None
-    flow_count = 0
+    processed_count = 0
 
-    while flow_count < max_flows:
+    while processed_count < max_flows:
         first_item = app.get_first_list_item()
-        flow_count += 1
-        log.info(f"  —— 数据流{flow_count} 第一项: {first_item} ——")
+        flow_no = processed_count + 1
+        log.info(f"  —— 数据流{flow_no} 第一项: {first_item} ——")
+
+        if not first_item:
+            log.error("  数据流列表第一项为空，无法确认当前页面状态，停止第15步")
+            return False
 
         # 与上一个数据流相同 → 已是最后一个
-        if prev_item is not None and first_item and first_item == prev_item:
-            log.info(f"  数据流{flow_count}与上一个相同，停止")
+        if prev_item is not None and first_item == prev_item:
+            log.info(f"  数据流{flow_no}与上一个相同，停止")
             break
         prev_item = first_item
 
         # 执行当前数据流操作
-        _process_flow(app, flow_count)
+        flow_started_at = time.time()
+        if not _process_flow(app, flow_no):
+            log.error("  数据流%s 保存/载入流程失败，停止第15步", flow_no)
+            return False
         # 数据流列表被 DTS 存到桌面 → 拷回 out_dir，供 AI 阶段1 支持清单使用
-        _copy_dataflow_list(out_dir, flow_count)
-        log.info(f"  数据流{flow_count} 完成")
-        app.wait_for_control("1")
+        if not _copy_dataflow_list(out_dir, flow_no, min_mtime=flow_started_at - 5):
+            log.error("  数据流%s 列表文件未成功保存，停止第15步", flow_no)
+            return False
+        log.info(f"  数据流{flow_no} 完成")
+        processed_count += 1
+
+        if not app.wait_for_control("1", timeout=12):
+            log.warning("  控件 1 未出现，继续检查 CSV 路径界面")
         # 弹窗确定
         exit_btn = app.window.child_window(
             auto_id="1", control_type="Button", found_index=0
@@ -315,23 +338,32 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
             app.click_ctrl(exit_btn)
 
         # ── 读取保存路径 ──
-        app.wait_for_control("1058")
+        if not app.wait_for_control("1058", timeout=45):
+            log.error("  CSV 路径界面确认控件 1058 未出现，停止第15步")
+            return False
         csv = app.extract_csv_path()
         # 把 DTS 导出的 CSV 拷进 out_dir（AI 阶段2/3 的数据源）
         if csv and Path(csv).exists():
             try:
-                shutil.copy2(csv, out_dir / f"DataFlow_{flow_count}.csv")
-                log.info(f"  ✓ 数据流CSV已保存: DataFlow_{flow_count}.csv")
+                shutil.copy2(csv, out_dir / f"DataFlow_{flow_no}.csv")
+                log.info(f"  ✓ 数据流CSV已保存: DataFlow_{flow_no}.csv")
             except Exception as e:
-                log.warning(f"  数据流CSV复制失败: {e}")
+                log.error(f"  数据流CSV复制失败: {e}")
+                return False
         else:
-            log.warning(f"  CSV 文件不存在: {csv}")
+            log.error(f"  CSV 文件不存在: {csv}")
+            return False
         exit_btn = app.window.child_window(
             auto_id="1058", control_type="Button", found_index=0
         )
         if exit_btn.exists(timeout=3):
             log.info("点击 csv 路径界面 确认 按钮")
-            app.click_ctrl(exit_btn)
+            if not app.click_ctrl(exit_btn):
+                log.error("点击 csv 路径界面 确认 按钮失败，停止第15步")
+                return False
+        else:
+            log.error("csv 路径界面确认按钮不存在，停止第15步")
+            return False
 
         log.info(f"  CSV: {csv}" if csv else "  CSV: 未找到")
 
@@ -340,9 +372,16 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
             auto_id="2", control_type="Button", found_index=0
         )
         log.info("返回到读取所有数据流")
-        app.click_ctrl(back)
+        if not app.click_ctrl(back):
+            log.error("点击返回到读取所有数据流失败，停止第15步")
+            return False
         # 返回主页
-        app.wait_for_control("1129")
+        if not app.wait_for_control("1129", timeout=30):
+            log.error("读取所有数据流页面控件 1129 未出现，停止第15步")
+            return False
+
+        if processed_count >= max_flows:
+            break
 
         # 切换到下一个数据流: DOWN + ENTER
         log.info("切换到下一个数据流...")
@@ -350,13 +389,15 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
         time.sleep(0.5)
         app.send_keys("{ENTER}")
         # 确定
-        app.wait_for_control("1028")
+        if not app.wait_for_control("1028", timeout=30):
+            log.error("下一个数据流页面控件 1028 未出现，停止第15步")
+            return False
 
-    log.info(f"共处理 {flow_count} 个数据流")
-    return True
+    log.info(f"共处理 {processed_count} 个数据流")
+    return processed_count > 0
 
 
-def _process_flow(app: DtsApp, flow_no: int):
+def _process_flow(app: DtsApp, flow_no: int) -> bool:
     """执行单个数据流的操作: 翻页+全选+保存列表+载入列表"""
     # 每个数据流用独立的文件名
     file_name = f"DataFlow_List_{flow_no}.txt"
@@ -384,9 +425,12 @@ def _process_flow(app: DtsApp, flow_no: int):
     )
     log.info("点击 保存列表 按钮")
     if app.click_ctrl(save_btn):
-        app.drive_file_dialog(file_name, mode="save", timeout=10)
+        if not app.drive_file_dialog(file_name, mode="save", timeout=10):
+            log.warning("保存列表文件对话框处理失败")
+            return False
     else:
         log.warning("点击 保存列表 按钮失败")
+        return False
 
     # 载入列表 → 文件对话框驱动（同上；不再向主窗盲发多余 ENTER）
     load_btn = app.window.child_window(
@@ -394,11 +438,14 @@ def _process_flow(app: DtsApp, flow_no: int):
     )
     log.info("点击 载入列表 按钮")
     if app.click_ctrl(load_btn):
-        app.drive_file_dialog(file_name, mode="load", timeout=10)
+        if not app.drive_file_dialog(file_name, mode="load", timeout=10):
+            log.warning("载入列表文件对话框处理失败")
+            return False
         # 载入后 DTS 渲染已载入的数据流列表需要一点时间（原写死 sleep(10)）
         time.sleep(5)
     else:
         log.warning("点击 载入列表 按钮失败")
+        return False
 
     # 返回
     back_btn = app.window.child_window(
@@ -406,4 +453,9 @@ def _process_flow(app: DtsApp, flow_no: int):
     )
     if back_btn.exists(timeout=3):
         log.info("点击 返回 按钮")
-        app.click_ctrl(back_btn)
+        if not app.click_ctrl(back_btn):
+            log.warning("点击 返回 按钮失败")
+            return False
+        return True
+    log.warning("返回按钮(auto_id=1042)不存在")
+    return False
