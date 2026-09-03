@@ -627,13 +627,21 @@ class DtsApp(BaseApp):
         return 0
 
     def _dialog_button(self, hwnd: int, titles: list):
-        """在指定对话框子树内按按钮标题查找控件。"""
+        """在指定对话框子树内按操作标题查找控件。
+
+        Windows 的文件对话框中，「打开(O)」在部分系统上会暴露为
+        SplitButton 而不是 Button，因此精确标题匹配不能限定控件类型。
+        """
         try:
             from pywinauto import Desktop
 
             root = Desktop(backend="uia").window(handle=hwnd)
             for title in titles:
                 btn = root.child_window(title=title, control_type="Button", found_index=0)
+                if btn.exists(timeout=0.3):
+                    return btn
+                # 兼容文件对话框的 UIA_SplitButtonControlTypeId（如「打开(O)」）。
+                btn = root.child_window(title=title, found_index=0)
                 if btn.exists(timeout=0.3):
                     return btn
             for btn in root.descendants(control_type="Button"):
