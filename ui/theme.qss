@@ -18,9 +18,16 @@ QLabel#PageTitlePill { background: {glass}; color: {mut}; border: 1px solid {lin
 QLabel#CnPill { background: {glass}; color: {cyan}; border: 1px solid {acc_line};
   border-radius: 8px; padding: 3px 10px; font-size: 11px; font-weight: 600;
   font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
-QPushButton#ExitBtn { background: transparent; color: {mut}; border: 1px solid transparent;
-  border-radius: 8px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
-QPushButton#ExitBtn:hover { color: {crit}; background: {crit_soft}; border-color: {crit_line}; }
+QLabel#ClockPill { background: {glass}; color: {mut}; border: 1px solid {line};
+  border-radius: 8px; padding: 5px 12px; font-size: 12px; font-weight: 700;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+QPushButton#ThemeBtn { background: {glass}; color: {mut}; border: 1px solid {line};
+  border-radius: 18px; padding: 0; font-size: 16px; font-weight: 700;
+  min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px; }
+QPushButton#ThemeBtn:hover { color: {acc_hi}; background: {acc_soft}; border-color: {acc_line}; }
+QPushButton#ExitBtn { background: {crit_soft}; color: {crit}; border: 1px solid {crit_line};
+  border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 700; }
+QPushButton#ExitBtn:hover { color: {crit_hi}; background: {crit_soft}; border-color: {crit}; }
 
 /* ── 底部栏 ─────────────────────────────── */
 QFrame#BBar { background: {bottomb}; border: none; border-top: 1px solid {line}; }

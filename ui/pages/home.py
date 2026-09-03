@@ -142,6 +142,8 @@ class HomePage(LcsPage):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._body.setContentsMargins(26, 16, 26, 20)
+        self._body.setSpacing(14)
         self._qs = QSettings(ORG, APP)
         self._devices = self._load_devices()
         # 设计稿 renderDevices()：var isSel = (i===0) —— 第一张设备卡默认选中

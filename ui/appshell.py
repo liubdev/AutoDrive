@@ -2,7 +2,7 @@
 LCS700 应用外壳：顶部栏 + 页面栈 + 底部栏 + Toast + 模态框。
 
   AppShell（QWidget）——
-    TBar：RunchLogo + 远驰科技/Runch Tech（点击回首页）+ 页标题胶囊 + CN 胶囊 + 红色退出
+    TBar：RunchLogo + 远驰科技/Runch Tech（点击回首页）+ 页标题胶囊 + CN 胶囊 + 时钟 + 主题 + 红色退出
     QStackedWidget（PAGE_ORDER 19 页）
     BBar：左=账户按钮（头像 LX + 李翔） 右=上下文按钮动态重建（PAGE_CFG）
 
@@ -137,19 +137,24 @@ class AppShell(QWidget):
         cn_pill = QLabel("CN · LC20260828")
         cn_pill.setObjectName("CnPill")
         h.addWidget(cn_pill, 0, Qt.AlignVCenter)
+        self._clock_pill = QLabel("")
+        self._clock_pill.setObjectName("ClockPill")
+        h.addWidget(self._clock_pill, 0, Qt.AlignVCenter)
+        theme_btn = QPushButton("◐")
+        theme_btn.setObjectName("ThemeBtn")
+        theme_btn.setCursor(Qt.PointingHandCursor)
+        theme_btn.setToolTip("切换深色/浅色")
+        theme_btn.clicked.connect(self._toggle_theme)
+        h.addWidget(theme_btn, 0, Qt.AlignVCenter)
         exit_btn = QPushButton("退出")
         exit_btn.setObjectName("ExitBtn")
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.clicked.connect(self.exit_requested.emit)
         h.addWidget(exit_btn, 0, Qt.AlignVCenter)
-        # 兼容引用：设备状态 / 时钟不再显示（设计稿顶栏无此元素），
-        # 对象保留以便 wizard 流程 setText 与测试断言仍可用。
+        # 兼容引用：设备状态不显示，对象保留以便 wizard 流程 setText 与测试断言仍可用。
         self._dev_status = QLabel("○ 就绪")
         self._dev_status.setObjectName("DevStatus")
         self._dev_status.hide()
-        self._clock_pill = QLabel("")
-        self._clock_pill.setObjectName("ClockPill")
-        self._clock_pill.hide()
         return bar
 
     def _build_bottombar(self) -> QFrame:
@@ -190,6 +195,14 @@ class AppShell(QWidget):
     def set_clock_enabled(self, on: bool):
         self._clock_on = on
         self._clock_pill.setVisible(on)
+
+    def _toggle_theme(self):
+        from ui.theme import ThemeManager
+
+        tm = ThemeManager.instance()
+        if tm is None:
+            return
+        tm.set_theme("light" if tm.resolved == "dark" else "dark")
 
     # ── 页面注册 / 导航 ────────────────────────
 

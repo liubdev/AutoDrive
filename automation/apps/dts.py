@@ -626,6 +626,34 @@ class DtsApp(BaseApp):
             pass
         return 0
 
+    def _dialog_button(self, hwnd: int, titles: list):
+        """在指定对话框子树内按按钮标题查找控件。"""
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=hwnd)
+            for title in titles:
+                btn = root.child_window(title=title, control_type="Button", found_index=0)
+                if btn.exists(timeout=0.3):
+                    return btn
+            for btn in root.descendants(control_type="Button"):
+                try:
+                    name = (btn.window_text() or "").strip()
+                    if any(title in name for title in titles):
+                        return btn
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
+
+    def _click_dialog_button(self, hwnd: int, titles: list, tag: str) -> bool:
+        btn = self._dialog_button(hwnd, titles)
+        if not btn:
+            return False
+        logger.info("%s: 点击按钮 %s", tag, titles)
+        return self.click_ctrl(btn)
+
     def _wait_dialog_gone(self, dlg: int, wait: float = 6) -> bool:
         """等弹窗销毁或前台离开它（回车关闭后）；返回是否已关闭/离开。"""
         if not dlg:
@@ -642,12 +670,12 @@ class DtsApp(BaseApp):
 
     def confirm_enter_if_dialog(self, wait: float = 2.5, max_times: int = 3,
                                 exclude=None) -> bool:
-        """文件对话框回车后：若又出现 DTS #32770 弹窗（覆盖/确认）则回车默认按钮。
+        """文件对话框提交后：若又出现 DTS #32770 弹窗（覆盖/确认）则确认。
 
         旧代码在主窗口 self.window 里搜按钮 title="是(Y)" —— 覆盖确认是独立顶层
         弹窗，主窗子树里永远没有，导致 8 轮空等后只能盲打 {ENTER}{ENTER}（状态
-        失步的根源之一）。这里改为看前台：出现 #32770 才回车（默认按钮通常正是
-        "是(Y)"），回车后等它关闭，再处理下一个；最多 max_times 个连续弹窗。
+        失步的根源之一）。这里改为看前台/枚举弹窗：出现 #32770 时优先点击
+        "是(Y)"/"确定"，失败再回车兜底；最多 max_times 个连续弹窗。
         """
         handled = False
         exclude = set(exclude or [])
@@ -656,9 +684,10 @@ class DtsApp(BaseApp):
             if not dlg:
                 break
             handled = True
-            logger.info("检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 回车默认按钮",
+            logger.info("检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 确认",
                         dlg, bg.window_class(dlg), bg.window_title(dlg))
-            bg.send_keys(dlg, "{ENTER}")
+            if not self._click_dialog_button(dlg, ["是(Y)", "是", "确定"], "确认/覆盖弹窗"):
+                bg.send_keys(dlg, "{ENTER}")
             self._wait_dialog_gone(dlg, wait=4)
             exclude.add(dlg)
         return handled
@@ -669,8 +698,8 @@ class DtsApp(BaseApp):
 
         全程只作用于 DTS 文件对话框，不再切焦点到主窗口或强找 Edit：
           1. 按 DTS 进程 + 标题等待「保存列表/载入列表」顶层弹窗
-          2. 优先直接设置 Edit 文本，再 ENTER 触发默认键
-          3. 覆盖/确认 #32770 若出现 → 回车默认按钮（最多 max_times 次）
+          2. 优先直接设置 Edit 文本，再点击 保存(S)/打开(O)
+          3. 覆盖/确认 #32770 若出现 → 点击 是(Y)/确定
           4. 等文件对话框真正关闭再返回（避免后续按键打向正在关闭的弹窗）
 
         mode: "save" 保存列表 / "load" 载入列表（仅用于日志文案）。
@@ -686,10 +715,13 @@ class DtsApp(BaseApp):
         if edit:
             logger.info("%s文件对话框使用 Edit 0x%X 接收文件名", tag, edit)
             bg.set_text(edit, file_name)
-            bg.send_keys(dlg, "{ENTER}", target_hwnd=edit)
         else:
             # 兜底：系统文件框通常默认选中文件名输入框，直接键入即可。
-            bg.send_keys(dlg, f"{file_name}{{ENTER}}")
+            bg.send_keys(dlg, file_name)
+        action_titles = ["保存(S)", "保存"] if mode == "save" else ["打开(O)", "打开"]
+        if not self._click_dialog_button(dlg, action_titles, f"{tag}文件对话框"):
+            logger.warning("%s文件对话框未找到操作按钮，回退 Enter", tag)
+            bg.send_keys(dlg, "{ENTER}", target_hwnd=edit or None)
         # 覆盖/确认（是否出现不确定：出现才回车默认按钮）
         self.confirm_enter_if_dialog(wait=2.5, max_times=3, exclude={dlg})
         # 等文件对话框真正关闭

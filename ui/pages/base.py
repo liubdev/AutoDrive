@@ -2,8 +2,11 @@
 LCS700 页面基类：滚动页 + 通用工具。
 """
 
+from PySide6.QtCore import QPointF
+from PySide6.QtGui import QColor, QPainter, QRadialGradient
 from PySide6.QtWidgets import QFrame, QScrollArea, QVBoxLayout, QWidget
 
+from ui.theme import ThemeManager
 from ui.widgets import _prop, section_header  # noqa: F401  重新导出
 
 __all__ = ["LcsPage", "_prop", "section_header"]
@@ -31,6 +34,36 @@ class LcsPage(QWidget):
         self._body.setSpacing(16)
         self._scroll.setWidget(body)
         lay.addWidget(self._scroll)
+
+    def paintEvent(self, event):
+        """对齐 HTML body 背景：底色 + 顶部径向光 + 40px 细网格。"""
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(self._tok("board", "#0b0e14")))
+        grad = QRadialGradient(QPointF(self.width() / 2, 0), max(self.width(), 1) * 0.55)
+        if self._mode() == "light":
+            glow = QColor(56, 189, 248, 18)
+            grid = None
+        else:
+            glow = QColor(45, 62, 80, 90)
+            grid = QColor(255, 255, 255, 8)
+        grad.setColorAt(0.0, glow)
+        grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.fillRect(self.rect(), grad)
+        if grid is not None:
+            p.setPen(grid)
+            for x in range(0, self.width(), 40):
+                p.drawLine(x, 0, x, self.height())
+            for y in range(0, self.height(), 40):
+                p.drawLine(0, y, self.width(), y)
+
+    def _mode(self) -> str:
+        tm = ThemeManager.instance()
+        return tm.resolved if tm is not None else "dark"
+
+    def _tok(self, key: str, fallback: str) -> str:
+        tm = ThemeManager.instance()
+        return tm.tokens.get(key, fallback) if tm is not None else fallback
 
     def on_enter(self):
         """切页到此页时由 AppShell 调用。"""

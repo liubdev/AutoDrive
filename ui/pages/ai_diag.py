@@ -28,6 +28,8 @@ class AiDiagPage(LcsPage):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._body.setContentsMargins(26, 20, 26, 20)
+        self._body.setSpacing(18)
         self._device_name = ""
         self._question = ""
         self._result = None
