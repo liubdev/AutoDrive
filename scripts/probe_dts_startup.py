@@ -36,6 +36,7 @@ class StartupTests(unittest.TestCase):
         clock.monotonic.side_effect = None
         clock.monotonic.return_value = 0
         clock.sleep.reset_mock()
+        clock.sleep.side_effect = None
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.exe = Path(self.temp.name) / 'DTS650.exe'
@@ -104,6 +105,57 @@ class StartupTests(unittest.TestCase):
         app._click_below_text = Mock()
         self.assertTrue(app.enter_system())
         app._click_below_text.assert_not_called()
+
+    def navigation_app(self, target_after=None, source_until=None, disabled_target_after=None):
+        app = DtsApp()
+        ticks = [0.0]
+        clock.monotonic.side_effect = lambda: ticks[0]
+        clock.sleep.side_effect = lambda seconds: ticks.__setitem__(0, ticks[0] + seconds)
+        app._reconnect_main = Mock(return_value=True)
+        rect = SimpleNamespace(left=20, bottom=89, width=lambda: 1880, height=lambda: 38)
+        anchor = SimpleNamespace(handle=123, rectangle=lambda: rect)
+        app.click_at = Mock(return_value=True)
+        def ready(**selector):
+            if selector['auto_id'] == '1185':
+                return anchor if source_until is None or ticks[0] < source_until else None
+            if target_after is not None and app.click_at.call_count >= target_after:
+                return object()
+            if (disabled_target_after is not None and ticks[0] >= disabled_target_after
+                    and not selector.get('require_enabled', True)):
+                return object()
+            return None
+        app._ready_control = Mock(side_effect=ready)
+        return app
+
+    def test_enter_system_retries_missed_click(self):
+        app = self.navigation_app(target_after=2)
+        self.assertTrue(app.enter_system(timeout=5))
+        self.assertEqual(app.click_at.call_count, 2)
+
+    def test_enter_system_stops_clicking_on_success(self):
+        app = self.navigation_app(target_after=1)
+        self.assertTrue(app.enter_system(timeout=5))
+        app.click_at.assert_called_once_with(144, 152)
+
+    def test_enter_system_retry_cap(self):
+        app = self.navigation_app()
+        self.assertFalse(app.enter_system(timeout=6))
+        self.assertEqual(app.click_at.call_count, 3)
+
+    def test_enter_system_no_retry_after_source_disappears(self):
+        app = self.navigation_app(source_until=0.5)
+        self.assertFalse(app.enter_system(timeout=4))
+        app.click_at.assert_called_once()
+
+    def test_enter_system_no_retry_when_target_initializing(self):
+        app = self.navigation_app(disabled_target_after=0.5)
+        self.assertFalse(app.enter_system(timeout=4))
+        app.click_at.assert_called_once()
+
+    def test_enter_system_short_timeout_limits_retries(self):
+        app = self.navigation_app()
+        self.assertFalse(app.enter_system(timeout=1))
+        app.click_at.assert_called_once()
 
     def test_missing_confirm_skips_without_sleep(self):
         app = DtsApp()

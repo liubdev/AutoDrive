@@ -197,16 +197,45 @@ class DtsApp(BaseApp):
                                 control_type="Text") is not None
 
     def enter_system(self, timeout: int = 30) -> bool:
+        """原页面仍可操作时有限补点；目标出现后停止投递点击。"""
+        deadline = time.monotonic() + timeout
         if not self._reconnect_main(timeout):
             return False
         target = dict(auto_id="1033", class_name="AfxWnd80su", control_type="Pane")
-        if self._ready_control(**target) is not None:
-            return True
-        if self._wait_ready(timeout, title="当前设置:车下使用", control_type="Text") is None:
-            return False
-        if not self._click_below_text(auto_id="1185", rx=0.066, ry=1.66, settle=0):
-            return False
-        return self._wait_ready(timeout, **target) is not None
+        source = dict(auto_id="1185", title="当前设置:车下使用", control_type="Text")
+        attempts = 0
+        next_click = 0.0
+        source_handle = None
+        while time.monotonic() < deadline:
+            if self._ready_control(**target) is not None:
+                logger.info("点击进入系统: 目标页面已就绪（共点击 %d 次）", attempts)
+                return True
+            # 目标已显示但尚不可用也不补点，等待它完成初始化。
+            target_visible = self._ready_control(require_enabled=False, **target) is not None
+            anchor = self._ready_control(**source)
+            now = time.monotonic()
+            if not target_visible and anchor is not None and attempts < 3 and now >= next_click:
+                try:
+                    handle = anchor.handle
+                    if source_handle is None:
+                        source_handle = handle
+                    # 页面控件已重建，不能确认仍是首次点击的原页面，不再补点。
+                    if handle == source_handle:
+                        r = anchor.rectangle()
+                        # 在实际点击前再检查目标，避免检测期间恰好完成跳转。
+                        if self._ready_control(require_enabled=False, **target) is None:
+                            attempts += 1
+                            logger.info("点击进入系统: 原页面仍可操作，点击 %d/3", attempts)
+                            if not self.click_at(r.left + int(r.width() * 0.066),
+                                                 r.bottom + int(r.height() * 1.66)):
+                                logger.warning("点击进入系统: 第 %d 次点击投递失败", attempts)
+                            next_click = time.monotonic() + 1.5
+                except Exception as exc:
+                    logger.debug("点击进入系统: 页面切换中，暂不补点: %s", exc)
+            time.sleep(0.2)
+        logger.error("点击进入系统: %ss 内目标页面未就绪（点击 %d/3 次），停止流程",
+                     timeout, attempts)
+        return False
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
         target = dict(auto_id="1058", title="直接进入", control_type="Button")
