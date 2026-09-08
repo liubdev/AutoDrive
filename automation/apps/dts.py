@@ -101,11 +101,12 @@ class DtsApp(BaseApp):
 
     # ── 启动确认（UIA 标准控件） ────────────────────
 
-    def _ready_control(self, **selector):
+    def _ready_control(self, require_enabled=True, **selector):
         """只接受当前 DTS 窗口中可见、可用的控件；每次重新解析句柄。"""
         try:
             ctrl = self.window.child_window(**selector)
-            if ctrl.exists(timeout=0) and ctrl.is_visible() and ctrl.is_enabled():
+            if (ctrl.exists(timeout=0) and ctrl.is_visible()
+                    and (not require_enabled or ctrl.is_enabled())):
                 return ctrl
         except Exception:
             pass
@@ -121,22 +122,66 @@ class DtsApp(BaseApp):
         logger.error("等待 DTS 页面超时: %s", selector)
         return None
 
+    def _home_anchor(self):
+        # 翻页按钮在只有一页时可能禁用，仍可用作定位锚点。
+        ctrl = self._ready_control(require_enabled=False, auto_id="1013",
+                                   control_type="Button")
+        if ctrl is None:
+            ctrl = self._ready_control(require_enabled=False, title="上翻页",
+                                       control_type="Button")
+        return ctrl
+
+    def _probe_startup(self):
+        """同时探测确认弹窗和主页，只在当前 DTS PID 内匹配。"""
+        if not self._pid:
+            self._pid = self._find_process()
+        if not self._pid:
+            return None, None
+        wins = find_elements(backend="uia", top_level_only=True, process=self._pid)
+        # 弹窗优先，避免把模态弹窗后面的主页误认为可以继续。
+        for w in wins:
+            try:
+                if w.class_name != "#32770":
+                    continue
+                if not any(c.name == "确认" for c in w.children()):
+                    continue
+                if not self._connect_by_handle(w.handle, w.process_id):
+                    continue
+                btn = self._ready_control(auto_id="1", title="确认", control_type="Button")
+                if btn is not None:
+                    self._apply_window_hiding()
+                    return "confirm", btn
+                return None, None  # 弹窗尚未可交互，继续等待
+            except Exception:
+                continue
+        for w in wins:
+            try:
+                if not (w.class_name == "CDTS650MainClass" or "DTS" in (w.name or "")):
+                    continue
+                if not self._connect_by_handle(w.handle, w.process_id):
+                    continue
+                if self.window.is_enabled() and self._home_anchor() is not None:
+                    self._apply_window_hiding()
+                    return "home", None
+            except Exception:
+                continue
+        return None, None
+
     def confirm(self, timeout: int = 30) -> bool:
-        btn = self._wait_ready(timeout, auto_id="1", title="确认",
-                               control_type="Button")
-        if btn is None or not self.click_ctrl(btn):
-            return False
         deadline = time.monotonic() + timeout
+        clicked = False
         while time.monotonic() < deadline:
-            if self._ready_control(auto_id="1", title="确认", control_type="Button") is None:
-                break
+            state, btn = self._probe_startup()
+            if state == "home":
+                logger.info("确认完成，主页已就绪" if clicked else "无启动确认弹窗，主页已就绪，跳过确认")
+                return True
+            if state == "confirm" and not clicked:
+                if not self.click_ctrl(btn):
+                    return False
+                clicked = True
             time.sleep(0.2)
-        else:
-            logger.error("启动确认弹窗未关闭")
-            return False
-        if not self._reconnect_main(timeout):
-            return False
-        return self._wait_ready(timeout, title="上翻页", control_type="Button") is not None
+        logger.error("启动页面未就绪（确认已点击=%s），停止导航", clicked)
+        return False
 
     def one_click_enter(self, timeout: int = 30) -> bool:
         # 保留现有相对锚点；截图中的容器不是可 Invoke 的按钮。
@@ -144,7 +189,7 @@ class DtsApp(BaseApp):
             return False
         if self._ready_control(title="当前设置:车下使用", control_type="Text") is not None:
             return True
-        if self._wait_ready(timeout, title="上翻页", control_type="Button") is None:
+        if self._wait_ready(timeout, require_enabled=False, auto_id="1013", control_type="Button") is None:
             return False
         if not self._click_image_btn(rx=0.573, ry=0.178, settle=0):
             return False
@@ -1059,33 +1104,15 @@ class DtsApp(BaseApp):
         return False
 
     def _wait_for_dts_window(self, timeout: int = 30):
-        """等 DTS 启动确认弹窗 (#32770 + 子控件"确认")；超时打所见窗口诊断"""
-        deadline = time.time() + timeout
-        seen = set()
-        while time.time() < deadline:
-            if not self._pid:
-                self._pid = self._find_process()
-            wins = find_elements(backend="uia", top_level_only=True)
-            for w in wins:
-                try:
-                    if w.process_id == self.pid and w.class_name == "#32770":
-                        for child in w.children():
-                            if child.name == "确认":
-                                if not self._connect_by_handle(w.handle, w.process_id):
-                                    continue
-                                self._apply_window_hiding()
-                                logger.info("已连接 DTS 确认窗口 (hwnd=%s)", w.handle)
-                                return True
-                except Exception:
-                    continue
-            for w in wins:
-                try:
-                    seen.add(f"{w.class_name}|{w.name}")
-                except Exception:
-                    pass
+        """确认弹窗或主页任一就绪即可，不要求每次启动都有确认弹窗。"""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            state, _ = self._probe_startup()
+            if state is not None:
+                logger.info("DTS 启动页面已就绪: %s", state)
+                return True
             time.sleep(0.2)
-        logger.warning("DTS 确认窗口未在 %ds 内出现；期间见过的顶层窗口: %s",
-                       timeout, sorted(seen)[:20] or "（无）")
+        logger.error("DTS 启动确认弹窗和主页均未在 %ds 内就绪", timeout)
         return False
 
     def restart_for_diagnosis(self, timeout: int = 30) -> bool:

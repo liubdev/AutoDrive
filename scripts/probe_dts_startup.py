@@ -23,7 +23,8 @@ tree = ast.parse((ROOT / 'automation/apps/dts.py').read_text())
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'DtsApp')
 cls.bases = []
 cls.body = [n for n in cls.body if isinstance(n, ast.FunctionDef)
-            and n.name in {'one_click_enter', 'enter_system', 'restart_for_diagnosis', '_wait_ready'}]
+            and n.name in {'one_click_enter', 'enter_system', 'restart_for_diagnosis', '_wait_ready', 'confirm',
+                           '_wait_for_dts_window', '_home_anchor', '_ready_control', '_probe_startup'}]
 clock = SimpleNamespace(monotonic=Mock(), sleep=Mock())
 ns = {'time': clock, 'logger': logging.getLogger('probe')}
 exec(compile(ast.Module(body=[cls], type_ignores=[]), 'dts.py', 'exec'), ns)
@@ -32,6 +33,9 @@ DtsApp = ns['DtsApp']
 
 class StartupTests(unittest.TestCase):
     def setUp(self):
+        clock.monotonic.side_effect = None
+        clock.monotonic.return_value = 0
+        clock.sleep.reset_mock()
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.exe = Path(self.temp.name) / 'DTS650.exe'
@@ -100,6 +104,64 @@ class StartupTests(unittest.TestCase):
         app._click_below_text = Mock()
         self.assertTrue(app.enter_system())
         app._click_below_text.assert_not_called()
+
+    def test_missing_confirm_skips_without_sleep(self):
+        app = DtsApp()
+        app._probe_startup = Mock(return_value=("home", None))
+        app.click_ctrl = Mock()
+        self.assertTrue(app.confirm())
+        app.click_ctrl.assert_not_called()
+        clock.sleep.assert_not_called()
+
+    def test_startup_accepts_home_without_confirm(self):
+        app = DtsApp()
+        app._probe_startup = Mock(return_value=("home", None))
+        self.assertTrue(app._wait_for_dts_window())
+        clock.sleep.assert_not_called()
+
+    def test_delayed_confirm_is_clicked_once_until_home(self):
+        app = DtsApp()
+        btn = object()
+        app._probe_startup = Mock(side_effect=[(None, None), ("confirm", btn),
+                                              ("confirm", btn), ("home", None)])
+        app.click_ctrl = Mock(return_value=True)
+        self.assertTrue(app.confirm())
+        app.click_ctrl.assert_called_once_with(btn)
+
+    def test_unknown_page_is_not_skipped(self):
+        app = DtsApp()
+        app._probe_startup = Mock(return_value=(None, None))
+        app.click_ctrl = Mock()
+        clock.monotonic.side_effect = [0, 0, 2]
+        self.assertFalse(app.confirm(timeout=1))
+        app.click_ctrl.assert_not_called()
+
+    def test_disabled_paging_button_is_valid_anchor(self):
+        app = DtsApp()
+        button = Mock()
+        button.exists.return_value = True
+        button.is_visible.return_value = True
+        button.is_enabled.return_value = False
+        app.window = Mock()
+        app.window.child_window.return_value = button
+        self.assertIs(app._home_anchor(), button)
+        self.assertIsNone(app._ready_control(auto_id="1013", control_type="Button"))
+
+    def test_probe_prefers_confirm_over_home_and_filters_pid(self):
+        app = DtsApp()
+        app._pid = 42
+        main = SimpleNamespace(class_name="CDTS650MainClass", name="DTS650", handle=1, process_id=42)
+        dialog = SimpleNamespace(class_name="#32770", name="", handle=2, process_id=42,
+                                 children=lambda: [SimpleNamespace(name="确认")])
+        app._connect_by_handle = Mock(return_value=True)
+        btn = object()
+        app._ready_control = Mock(return_value=btn)
+        app._apply_window_hiding = Mock()
+        finder = Mock(return_value=[main, dialog])
+        with patch.dict(ns, find_elements=finder):
+            self.assertEqual(app._probe_startup(), ("confirm", btn))
+        finder.assert_called_once_with(backend="uia", top_level_only=True, process=42)
+        app._connect_by_handle.assert_called_once_with(2, 42)
 
     def test_wait_returns_immediately_when_ready(self):
         app = DtsApp()
