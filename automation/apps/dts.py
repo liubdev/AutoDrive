@@ -102,14 +102,20 @@ class DtsApp(BaseApp):
     # ── 启动确认（UIA 标准控件） ────────────────────
 
     def _ready_control(self, require_enabled=True, **selector):
-        """只接受当前 DTS 窗口中可见、可用的控件；每次重新解析句柄。"""
+        """重新解析控件，并保留失败原因供导航日志使用。"""
         try:
             ctrl = self.window.child_window(**selector)
-            if (ctrl.exists(timeout=0) and ctrl.is_visible()
-                    and (not require_enabled or ctrl.is_enabled())):
+            if not ctrl.exists(timeout=0):
+                self._last_control_probe = "未找到或匹配不唯一"
+            elif not ctrl.is_visible():
+                self._last_control_probe = "不可见"
+            elif require_enabled and not ctrl.is_enabled():
+                self._last_control_probe = "不可用"
+            else:
+                self._last_control_probe = "已就绪"
                 return ctrl
-        except Exception:
-            pass
+        except Exception as exc:
+            self._last_control_probe = f"查询失败: {exc}"
         return None
 
     def _wait_ready(self, timeout=20, **selector):
@@ -205,33 +211,48 @@ class DtsApp(BaseApp):
         source = dict(auto_id="1185", title="当前设置:车下使用", control_type="Text")
         attempts = 0
         next_click = 0.0
-        source_handle = None
+        last_reason = None
         while time.monotonic() < deadline:
             if self._ready_control(**target) is not None:
                 logger.info("点击进入系统: 目标页面已就绪（共点击 %d 次）", attempts)
                 return True
-            # 目标已显示但尚不可用也不补点，等待它完成初始化。
+            target_detail = getattr(self, "_last_control_probe", "未就绪")
             target_visible = self._ready_control(require_enabled=False, **target) is not None
-            anchor = self._ready_control(**source)
+            # 文字仅作定位，不以文字本身的 enabled 状态决定能否操作页面。
+            anchor = self._ready_control(require_enabled=False, **source)
+            source_detail = getattr(self, "_last_control_probe", "未就绪")
             now = time.monotonic()
-            if not target_visible and anchor is not None and attempts < 3 and now >= next_click:
+            reason = None
+            if target_visible:
+                reason = "目标窗格已显示但尚不可用"
+            elif anchor is None:
+                reason = f"原页面锚点{source_detail}；目标{target_detail}"
+            elif attempts >= 3:
+                reason = "已达 3 次点击上限，等待目标页面"
+            elif now < next_click:
+                reason = "等待点击后的 1.5s 切换间隔"
+            else:
                 try:
-                    handle = anchor.handle
-                    if source_handle is None:
-                        source_handle = handle
-                    # 页面控件已重建，不能确认仍是首次点击的原页面，不再补点。
-                    if handle == source_handle:
+                    parent = anchor.parent()
+                    if not parent.is_visible() or not parent.is_enabled():
+                        reason = "原页面容器不可见或不可用"
+                    else:
                         r = anchor.rectangle()
-                        # 在实际点击前再检查目标，避免检测期间恰好完成跳转。
                         if self._ready_control(require_enabled=False, **target) is None:
                             attempts += 1
-                            logger.info("点击进入系统: 原页面仍可操作，点击 %d/3", attempts)
+                            logger.info("点击进入系统: 原页面仍可操作，点击 %d/3（锚点=%s，容器=%s）",
+                                        attempts, anchor.handle, parent.handle)
                             if not self.click_at(r.left + int(r.width() * 0.066),
                                                  r.bottom + int(r.height() * 1.66)):
                                 logger.warning("点击进入系统: 第 %d 次点击投递失败", attempts)
                             next_click = time.monotonic() + 1.5
+                        else:
+                            reason = "点击前目标窗格已出现，取消补点"
                 except Exception as exc:
-                    logger.debug("点击进入系统: 页面切换中，暂不补点: %s", exc)
+                    reason = f"页面控件查询失败: {exc}"
+            if reason is not None and reason != last_reason:
+                logger.info("点击进入系统: 暂不补点：%s", reason)
+            last_reason = reason
             time.sleep(0.2)
         logger.error("点击进入系统: %ss 内目标页面未就绪（点击 %d/3 次），停止流程",
                      timeout, attempts)

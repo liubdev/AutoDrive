@@ -113,7 +113,8 @@ class StartupTests(unittest.TestCase):
         clock.sleep.side_effect = lambda seconds: ticks.__setitem__(0, ticks[0] + seconds)
         app._reconnect_main = Mock(return_value=True)
         rect = SimpleNamespace(left=20, bottom=89, width=lambda: 1880, height=lambda: 38)
-        anchor = SimpleNamespace(handle=123, rectangle=lambda: rect)
+        parent = SimpleNamespace(handle=456, is_visible=lambda: True, is_enabled=lambda: True)
+        anchor = SimpleNamespace(handle=123, rectangle=lambda: rect, parent=lambda: parent)
         app.click_at = Mock(return_value=True)
         def ready(**selector):
             if selector['auto_id'] == '1185':
@@ -126,6 +127,30 @@ class StartupTests(unittest.TestCase):
             return None
         app._ready_control = Mock(side_effect=ready)
         return app
+
+    def test_enter_system_retries_after_anchor_handle_changes(self):
+        app = self.navigation_app(target_after=2)
+        original = app._ready_control.side_effect
+        def rebuilt(**selector):
+            ctrl = original(**selector)
+            if ctrl is not None and selector['auto_id'] == '1185':
+                ctrl.handle += 1
+            return ctrl
+        app._ready_control.side_effect = rebuilt
+        self.assertTrue(app.enter_system(timeout=5))
+        self.assertEqual(app.click_at.call_count, 2)
+
+    def test_enter_system_does_not_click_disabled_page(self):
+        app = self.navigation_app()
+        original = app._ready_control.side_effect
+        def disabled(**selector):
+            ctrl = original(**selector)
+            if ctrl is not None and selector['auto_id'] == '1185':
+                ctrl.parent().is_enabled = lambda: False
+            return ctrl
+        app._ready_control.side_effect = disabled
+        self.assertFalse(app.enter_system(timeout=2))
+        app.click_at.assert_not_called()
 
     def test_enter_system_retries_missed_click(self):
         app = self.navigation_app(target_after=2)

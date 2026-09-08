@@ -44,6 +44,7 @@ SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0
 GWL_EXSTYLE = -20
 WS_EX_APPWINDOW, WS_EX_TOOLWINDOW = 0x00040000, 0x00000080
 CWP_ALL = 0x0000
+CWP_SKIPINVISIBLE, CWP_SKIPDISABLED, CWP_SKIPTRANSPARENT = 0x0001, 0x0002, 0x0004
 MAPVK_VK_TO_VSC = 0
 
 OFFSCREEN_X, OFFSCREEN_Y = -32000, -32000
@@ -290,10 +291,21 @@ def _screen_to_client(hwnd: int, sx: int, sy: int):
 
 def _deepest_child(hwnd_top: int, sx: int, sy: int):
     """找屏幕点 (sx,sy) 下的最深子窗口（模拟真实鼠标命中测试）"""
-    cx, cy = _screen_to_client(hwnd_top, sx, sy)
-    pt = wintypes.POINT(cx, cy)
-    child = user32.ChildWindowFromPointEx(hwnd_top, pt, CWP_ALL)
-    return child or hwnd_top
+    current = hwnd_top
+    seen = set()
+    flags = CWP_SKIPINVISIBLE | CWP_SKIPDISABLED | CWP_SKIPTRANSPARENT
+    for _ in range(32):
+        seen.add(current)
+        cx, cy = _screen_to_client(current, sx, sy)
+        child = user32.ChildWindowFromPointEx(current, wintypes.POINT(cx, cy), flags)
+        if not child:
+            return 0  # 点不在客户区 / 查询失败，不把点击投给外层兜底
+        if child == current:
+            return current
+        if child in seen:
+            return 0
+        current = child
+    return 0
 
 
 def click_at(hwnd_top: int, sx: int, sy: int) -> bool:
@@ -301,6 +313,9 @@ def click_at(hwnd_top: int, sx: int, sy: int) -> bool:
     if not hwnd_top:
         return False
     target = _deepest_child(hwnd_top, sx, sy)
+    if not target:
+        logger.warning("坐标点击 (%d,%d): 未命中可操作子窗口", sx, sy)
+        return False
     cx, cy = _screen_to_client(target, sx, sy)
     lp = (cy << 16) | (cx & 0xFFFF)
     user32.SendMessageW(target, WM_MOUSEMOVE, 0, lp)
