@@ -144,49 +144,17 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     Returns:
         list[FlowStep]
     """
-    def enter_system_after_settle() -> bool:
-        """给“一键进入”的页面切换留出稳定时间，再执行下一次点击。"""
-        log.info("一键进入后等待 1.0s，再点击进入系统")
-        time.sleep(1)
-        return app.enter_system()
-
     steps = []
 
-    # ── 第1步: 启动 ──
-    steps.append(FlowStep("启动 DTS",
-                          action=lambda: app.ensure_running(timeout=30)))
-
-    # ── 第2步: 确认 ──
-    steps.append(FlowStep("确认",
-                          action=lambda: app.confirm(timeout=15),
-                          verify={"auto_id": "1197"}, timeout=20,
-                          continue_on_missing=True))
-
-    # ── 第3步: 一键进入 ──
-    steps.append(FlowStep("一键进入",
-                          action=lambda: app.one_click_enter(),
-                          verify={"auto_id": "6"}, timeout=20,
-                          retry=2,
-                          continue_on_missing=False))
-
-    # ── 第4步: 点击进入系统 ──
-    steps.append(FlowStep("点击进入系统",
-                          action=enter_system_after_settle,
-                          verify={"auto_id": "1046"}, timeout=20,
-                          retry=2,
-                          continue_on_missing=False))
-
-    # ── 第5步: 发动机系统诊断 ──
+    # 每次完整采集先清理旧实例，从启动确认页重新执行。
+    steps.append(FlowStep("启动 DTS", action=lambda: app.restart_for_diagnosis(timeout=30)))
+    # 动作内部负责页面就绪验证，避免重复等待旧版控件或重放已成功的点击。
+    steps.append(FlowStep("确认", action=lambda: app.confirm(timeout=20)))
+    steps.append(FlowStep("一键进入", action=lambda: app.one_click_enter(timeout=20)))
+    steps.append(FlowStep("点击进入系统", action=lambda: app.enter_system(timeout=20)))
     steps.append(FlowStep("发动机系统诊断",
-                          action=lambda: app.send_enter(),
-                          verify={"auto_id": "1058"}, timeout=20,
-                          continue_on_missing=False))
-
-    # ── 第6步: 直接进入 ──
-    steps.append(FlowStep("直接进入",
-                          action=lambda: app.send_space(),
-                          verify={"auto_id": "1046"}, timeout=20,
-                          continue_on_missing=False))
+                          action=lambda: app.diagnose_engine_system(timeout=30)))
+    steps.append(FlowStep("直接进入", action=lambda: app.direct_enter(timeout=20)))
 
     # ── 第7步: 发动机2.0T ──
     steps.append(FlowStep("发动机2.0T",

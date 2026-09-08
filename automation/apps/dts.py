@@ -101,57 +101,98 @@ class DtsApp(BaseApp):
 
     # ── 启动确认（UIA 标准控件） ────────────────────
 
+    def _ready_control(self, **selector):
+        """只接受当前 DTS 窗口中可见、可用的控件；每次重新解析句柄。"""
+        try:
+            ctrl = self.window.child_window(**selector)
+            if ctrl.exists(timeout=0) and ctrl.is_visible() and ctrl.is_enabled():
+                return ctrl
+        except Exception:
+            pass
+        return None
+
+    def _wait_ready(self, timeout=20, **selector):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            ctrl = self._ready_control(**selector)
+            if ctrl is not None:
+                return ctrl
+            time.sleep(0.2)
+        logger.error("等待 DTS 页面超时: %s", selector)
+        return None
+
     def confirm(self, timeout: int = 30) -> bool:
-        if not self.window and not self._wait_for_dts_window(timeout):
+        btn = self._wait_ready(timeout, auto_id="1", title="确认",
+                               control_type="Button")
+        if btn is None or not self.click_ctrl(btn):
             return False
-        btn = self.window.child_window(auto_id="1", control_type="Button")
-        if btn.exists(timeout=3):
-            # 后台：先把确认弹窗也隐藏到屏幕外，用户全程看不到
-            self._apply_window_hiding()
-            self.click_ctrl(btn)
-            logger.info("确认")
-            return True
-        return False
-
-    # ── 一键进入 ──
-    # 锚点: "上翻页" 按钮 (auto_id=1013)  按钮宽178
-    # 目标: (123,170) → rx=102/178=0.573, 内容区比例 ry=170/955=0.178
-
-    def one_click_enter(self, timeout: int = 30) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._ready_control(auto_id="1", title="确认", control_type="Button") is None:
+                break
+            time.sleep(0.2)
+        else:
+            logger.error("启动确认弹窗未关闭")
+            return False
         if not self._reconnect_main(timeout):
             return False
-        return self._click_until_control(
-            name="一键进入",
-            click=lambda: self._click_image_btn(rx=0.573, ry=0.178),
-            verify_auto_id="6",
-            attempts=3,
-            verify_timeout=5,
-        )
+        return self._wait_ready(timeout, title="上翻页", control_type="Button") is not None
 
-    # ── 点击进入系统 ──
-    # 锚点: "当前设置:车下使用" 文本 (auto_id=1185)  宽1880 高38
-    # 目标: (145,152) → rx=(145-20)/1880=0.066, ry=(152-89)/38=1.66
+    def one_click_enter(self, timeout: int = 30) -> bool:
+        # 保留现有相对锚点；截图中的容器不是可 Invoke 的按钮。
+        if not self._reconnect_main(timeout):
+            return False
+        if self._ready_control(title="当前设置:车下使用", control_type="Text") is not None:
+            return True
+        if self._wait_ready(timeout, title="上翻页", control_type="Button") is None:
+            return False
+        if not self._click_image_btn(rx=0.573, ry=0.178, settle=0):
+            return False
+        return self._wait_ready(timeout, title="当前设置:车下使用",
+                                control_type="Text") is not None
 
     def enter_system(self, timeout: int = 30) -> bool:
         if not self._reconnect_main(timeout):
             return False
-        return self._click_until_control(
-            name="点击进入系统",
-            click=lambda: self._click_below_text(auto_id="1185", rx=0.066, ry=1.66),
-            verify_auto_id="1046",
-            attempts=3,
-            verify_timeout=5,
-        )
-
-    # ── 发动机系统诊断（选项已默认选中，直接 Enter） ──
+        target = dict(auto_id="1033", class_name="AfxWnd80su", control_type="Pane")
+        if self._ready_control(**target) is not None:
+            return True
+        if self._wait_ready(timeout, title="当前设置:车下使用", control_type="Text") is None:
+            return False
+        if not self._click_below_text(auto_id="1185", rx=0.066, ry=1.66, settle=0):
+            return False
+        return self._wait_ready(timeout, **target) is not None
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
-        if not self._reconnect_main(timeout):
+        target = dict(auto_id="1058", title="直接进入", control_type="Button")
+        if self._ready_control(**target) is not None:
+            return True
+        pane = self._wait_ready(timeout, auto_id="1033", class_name="AfxWnd80su",
+                                control_type="Pane")
+        if pane is None:
             return False
-        logger.info("发动机系统诊断: Enter")
-        super().send_enter()
-        time.sleep(2)
-        return True
+        # Inspect: 窗格 (20,108)-(1903,937)，第一项 (195,130)。
+        # 只点击一次；识别通讯期间持续检测弹窗，避免排队点击落入下一页。
+        r = pane.rectangle()
+        if not self.click_at(r.left + round(r.width() * 175 / 1883),
+                             r.top + round(r.height() * 22 / 829)):
+            return False
+        return self._wait_ready(timeout, **target) is not None
+
+    def direct_enter(self, timeout: int = 20) -> bool:
+        btn = self._wait_ready(timeout, auto_id="1058", title="直接进入",
+                               control_type="Button")
+        if btn is None or not self.click_ctrl(btn):
+            return False
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            # 主页面旧控件可能仍在树中，先确认模态按钮已经消失。
+            if (self._ready_control(auto_id="1058", title="直接进入", control_type="Button") is None
+                    and self._ready_control(auto_id="1046", control_type="Button") is not None):
+                return True
+            time.sleep(0.2)
+        logger.error("直接进入后页面未就绪")
+        return False
 
     # ── 发送指令（先重连，兼容旧脚本） ──────────────
 
@@ -893,7 +934,7 @@ class DtsApp(BaseApp):
 
     # ── 文本锚点 ──────────────────────────────────
 
-    def _click_below_text(self, auto_id: str, rx: float, ry: float) -> bool:
+    def _click_below_text(self, auto_id: str, rx: float, ry: float, settle: float = 2) -> bool:
         """
         以文本控件为锚点，按比例偏移点击
 
@@ -910,9 +951,11 @@ class DtsApp(BaseApp):
                 r = text.rectangle()
                 target_x = r.left + int(r.width() * rx)
                 target_y = r.bottom + int(r.height() * ry)
-                self.click_at(target_x, target_y)
+                if not self.click_at(target_x, target_y):
+                    return False
                 logger.info(f"✓ 点击文本锚点 ({target_x},{target_y})")
-                time.sleep(2)
+                if settle:
+                    time.sleep(settle)
                 return True
         except Exception as e:
             logger.warning(f"文本锚点失败: {e}")
@@ -920,7 +963,7 @@ class DtsApp(BaseApp):
 
     # ── 底部按钮锚点 ──────────────────────────────
 
-    def _click_image_btn(self, rx: float, ry: float) -> bool:
+    def _click_image_btn(self, rx: float, ry: float, settle: float = 2) -> bool:
         """
         以"上翻页"按钮 (auto_id=1013) 为锚点，按比例偏移点击
 
@@ -937,9 +980,11 @@ class DtsApp(BaseApp):
                 content_bottom = r.top
                 target_x = r.left + int(r.width() * rx)
                 target_y = content_top + int((content_bottom - content_top) * ry)
-                self.click_at(target_x, target_y)
+                if not self.click_at(target_x, target_y):
+                    return False
                 logger.info(f"✓ 点击按钮锚点 ({target_x},{target_y})")
-                time.sleep(2)
+                if settle:
+                    time.sleep(settle)
                 return True
         except Exception as e:
             logger.warning(f"按钮锚点失败: {e}")
@@ -963,8 +1008,9 @@ class DtsApp(BaseApp):
             wins = find_elements(backend="uia", top_level_only=True)
             for w in wins:
                 try:
-                    if w.class_name == "CDTS650MainClass":
-                        self._connect_by_handle(w.handle, w.process_id)
+                    if w.process_id == self.pid and w.class_name == "CDTS650MainClass":
+                        if not self._connect_by_handle(w.handle, w.process_id):
+                            continue
                         self._apply_window_hiding()
                         logger.info("已连接 DTS 主窗口 (hwnd=%s)", w.handle)
                         return True
@@ -972,8 +1018,9 @@ class DtsApp(BaseApp):
                     continue
             for w in wins:
                 try:
-                    if w.class_name == "#32770" and "DTS" in (w.name or ""):
-                        self._connect_by_handle(w.handle, w.process_id)
+                    if w.process_id == self.pid and w.class_name == "#32770" and "DTS" in (w.name or ""):
+                        if not self._connect_by_handle(w.handle, w.process_id):
+                            continue
                         self._apply_window_hiding()
                         logger.info("已连接 DTS 弹窗 (hwnd=%s)", w.handle)
                         return True
@@ -982,7 +1029,10 @@ class DtsApp(BaseApp):
             # 跨版本兜底：DTS 进程的任意顶层窗口（类名不再可靠）
             for w in self._find_windows_by_exe():
                 try:
-                    self._connect_by_handle(w.handle, w.process_id)
+                    if self.pid and w.process_id != self.pid:
+                        continue
+                    if not self._connect_by_handle(w.handle, w.process_id):
+                        continue
                     self._apply_window_hiding()
                     logger.info("已连接 DTS 进程窗口 (hwnd=%s, class=%s)",
                                 w.handle, w.class_name)
@@ -1013,13 +1063,16 @@ class DtsApp(BaseApp):
         deadline = time.time() + timeout
         seen = set()
         while time.time() < deadline:
+            if not self._pid:
+                self._pid = self._find_process()
             wins = find_elements(backend="uia", top_level_only=True)
             for w in wins:
                 try:
-                    if w.class_name == "#32770":
+                    if w.process_id == self.pid and w.class_name == "#32770":
                         for child in w.children():
                             if child.name == "确认":
-                                self._connect_by_handle(w.handle)
+                                if not self._connect_by_handle(w.handle, w.process_id):
+                                    continue
                                 self._apply_window_hiding()
                                 logger.info("已连接 DTS 确认窗口 (hwnd=%s)", w.handle)
                                 return True
@@ -1030,13 +1083,20 @@ class DtsApp(BaseApp):
                     seen.add(f"{w.class_name}|{w.name}")
                 except Exception:
                     pass
-            time.sleep(0.5)
+            time.sleep(0.2)
         logger.warning("DTS 确认窗口未在 %ds 内出现；期间见过的顶层窗口: %s",
                        timeout, sorted(seen)[:20] or "（无）")
         return False
 
-    def ensure_running(self, timeout: int = 30) -> bool:
-        if self.connect_existing():
+    def restart_for_diagnosis(self, timeout: int = 30) -> bool:
+        from automation.processes import stop_executable
+        stop_executable(self.APP_EXE, timeout=10)
+        self.disconnect()
+        self._last_reconnect_at = 0.0
+        return self.ensure_running(timeout, fresh=True)
+
+    def ensure_running(self, timeout: int = 30, fresh: bool = False) -> bool:
+        if not fresh and self.connect_existing():
             self._apply_window_hiding()
             return True
         logger.info(f"启动 DTS: {self.APP_EXE}")
@@ -1044,13 +1104,15 @@ class DtsApp(BaseApp):
             task = bg.launch_elevated(self.APP_EXE)
             if task is None:
                 logger.warning("计划任务提权启动失败，回退普通启动")
-                bg.launch(self.APP_EXE, minimized=self.start_minimized)
+                self._pid = bg.launch(self.APP_EXE, minimized=self.start_minimized).pid
         elif self.background:
-            bg.launch(self.APP_EXE, minimized=self.start_minimized)
+            self._pid = bg.launch(self.APP_EXE, minimized=self.start_minimized).pid
         else:
             import subprocess
 
-            subprocess.Popen([self.APP_EXE])
+            self._pid = subprocess.Popen([self.APP_EXE]).pid
+        if not self._pid:
+            self._pid = self._find_process()
         self._launched_by_us = True
         logger.info("等待 DTS 启动窗口 (超时 %ds)", timeout)
         ok = self._wait_for_dts_window(timeout)
