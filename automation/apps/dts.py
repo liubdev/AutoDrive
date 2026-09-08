@@ -203,12 +203,13 @@ class DtsApp(BaseApp):
                                 control_type="Text") is not None
 
     def enter_system(self, timeout: int = 30) -> bool:
-        """原页面仍可操作时有限补点；目标出现后停止投递点击。"""
+        """等待帮助页 infoIcon 可见后双击入口；目标出现后停止投递。"""
         deadline = time.monotonic() + timeout
         if not self._reconnect_main(timeout):
             return False
         target = dict(auto_id="1033", class_name="AfxWnd80su", control_type="Pane")
         source = dict(auto_id="1185", title="当前设置:车下使用", control_type="Text")
+        marker = dict(auto_id="infoIcon", title="信息图标", control_type="Image")
         attempts = 0
         next_click = 0.0
         last_reason = None
@@ -221,10 +222,14 @@ class DtsApp(BaseApp):
             # 文字仅作定位，不以文字本身的 enabled 状态决定能否操作页面。
             anchor = self._ready_control(require_enabled=False, **source)
             source_detail = getattr(self, "_last_control_probe", "未就绪")
+            icon = self._ready_control(require_enabled=False, **marker)
+            icon_detail = getattr(self, "_last_control_probe", "未就绪")
             now = time.monotonic()
             reason = None
             if target_visible:
                 reason = "目标窗格已显示但尚不可用"
+            elif icon is None:
+                reason = f"等待信息图标 infoIcon 可见：{icon_detail}"
             elif anchor is None:
                 reason = f"原页面锚点{source_detail}；目标{target_detail}"
             elif attempts >= 3:
@@ -238,9 +243,11 @@ class DtsApp(BaseApp):
                         reason = "原页面容器不可见或不可用"
                     else:
                         r = anchor.rectangle()
-                        if self._ready_control(require_enabled=False, **target) is None:
+                        if self._ready_control(require_enabled=False, **marker) is None:
+                            reason = "双击前 infoIcon 已消失，继续等待"
+                        elif self._ready_control(require_enabled=False, **target) is None:
                             attempts += 1
-                            logger.info("点击进入系统: 原页面仍可操作，双击 %d/3（锚点=%s，容器=%s）",
+                            logger.info("点击进入系统: infoIcon 已可见且原页面可操作，双击 %d/3（锚点=%s，容器=%s）",
                                         attempts, anchor.handle, parent.handle)
                             if not self.double_click_at(r.left + int(r.width() * 0.066),
                                                  r.bottom + int(r.height() * 1.66)):

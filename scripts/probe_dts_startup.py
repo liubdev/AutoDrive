@@ -106,7 +106,8 @@ class StartupTests(unittest.TestCase):
         self.assertTrue(app.enter_system())
         app._click_below_text.assert_not_called()
 
-    def navigation_app(self, target_after=None, source_until=None, disabled_target_after=None):
+    def navigation_app(self, target_after=None, source_until=None, disabled_target_after=None,
+                       icon_after=0, icon_until=None):
         app = DtsApp()
         ticks = [0.0]
         clock.monotonic.side_effect = lambda: ticks[0]
@@ -117,6 +118,9 @@ class StartupTests(unittest.TestCase):
         anchor = SimpleNamespace(handle=123, rectangle=lambda: rect, parent=lambda: parent)
         app.double_click_at = Mock(return_value=True)
         def ready(**selector):
+            if selector['auto_id'] == 'infoIcon':
+                return (object() if icon_after is not None and ticks[0] >= icon_after
+                        and (icon_until is None or ticks[0] < icon_until) else None)
             if selector['auto_id'] == '1185':
                 return anchor if source_until is None or ticks[0] < source_until else None
             if target_after is not None and app.double_click_at.call_count >= target_after:
@@ -127,6 +131,29 @@ class StartupTests(unittest.TestCase):
             return None
         app._ready_control = Mock(side_effect=ready)
         return app
+
+    def test_enter_system_waits_for_info_icon_before_double_click(self):
+        app = self.navigation_app(target_after=1, icon_after=1)
+        clicked_at = []
+        app.double_click_at.side_effect = lambda *args: clicked_at.append(clock.monotonic()) or True
+        self.assertTrue(app.enter_system(timeout=4))
+        self.assertEqual(len(clicked_at), 1)
+        self.assertGreaterEqual(clicked_at[0], 1)
+
+    def test_enter_system_missing_info_icon_never_clicks(self):
+        app = self.navigation_app(icon_after=None)
+        self.assertFalse(app.enter_system(timeout=2))
+        app.double_click_at.assert_not_called()
+
+    def test_enter_system_icon_disappears_prevents_retry(self):
+        app = self.navigation_app(icon_until=0.5)
+        self.assertFalse(app.enter_system(timeout=4))
+        app.double_click_at.assert_called_once()
+
+    def test_enter_system_target_already_ready_needs_no_icon(self):
+        app = self.navigation_app(target_after=0, icon_after=None)
+        self.assertTrue(app.enter_system(timeout=2))
+        app.double_click_at.assert_not_called()
 
     def test_enter_system_retries_after_anchor_handle_changes(self):
         app = self.navigation_app(target_after=2)
