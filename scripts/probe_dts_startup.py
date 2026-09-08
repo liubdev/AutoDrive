@@ -115,11 +115,11 @@ class StartupTests(unittest.TestCase):
         rect = SimpleNamespace(left=20, bottom=89, width=lambda: 1880, height=lambda: 38)
         parent = SimpleNamespace(handle=456, is_visible=lambda: True, is_enabled=lambda: True)
         anchor = SimpleNamespace(handle=123, rectangle=lambda: rect, parent=lambda: parent)
-        app.click_at = Mock(return_value=True)
+        app.double_click_at = Mock(return_value=True)
         def ready(**selector):
             if selector['auto_id'] == '1185':
                 return anchor if source_until is None or ticks[0] < source_until else None
-            if target_after is not None and app.click_at.call_count >= target_after:
+            if target_after is not None and app.double_click_at.call_count >= target_after:
                 return object()
             if (disabled_target_after is not None and ticks[0] >= disabled_target_after
                     and not selector.get('require_enabled', True)):
@@ -138,7 +138,7 @@ class StartupTests(unittest.TestCase):
             return ctrl
         app._ready_control.side_effect = rebuilt
         self.assertTrue(app.enter_system(timeout=5))
-        self.assertEqual(app.click_at.call_count, 2)
+        self.assertEqual(app.double_click_at.call_count, 2)
 
     def test_enter_system_does_not_click_disabled_page(self):
         app = self.navigation_app()
@@ -150,37 +150,37 @@ class StartupTests(unittest.TestCase):
             return ctrl
         app._ready_control.side_effect = disabled
         self.assertFalse(app.enter_system(timeout=2))
-        app.click_at.assert_not_called()
+        app.double_click_at.assert_not_called()
 
     def test_enter_system_retries_missed_click(self):
         app = self.navigation_app(target_after=2)
         self.assertTrue(app.enter_system(timeout=5))
-        self.assertEqual(app.click_at.call_count, 2)
+        self.assertEqual(app.double_click_at.call_count, 2)
 
     def test_enter_system_stops_clicking_on_success(self):
         app = self.navigation_app(target_after=1)
         self.assertTrue(app.enter_system(timeout=5))
-        app.click_at.assert_called_once_with(144, 152)
+        app.double_click_at.assert_called_once_with(144, 152)
 
     def test_enter_system_retry_cap(self):
         app = self.navigation_app()
         self.assertFalse(app.enter_system(timeout=6))
-        self.assertEqual(app.click_at.call_count, 3)
+        self.assertEqual(app.double_click_at.call_count, 3)
 
     def test_enter_system_no_retry_after_source_disappears(self):
         app = self.navigation_app(source_until=0.5)
         self.assertFalse(app.enter_system(timeout=4))
-        app.click_at.assert_called_once()
+        app.double_click_at.assert_called_once()
 
     def test_enter_system_no_retry_when_target_initializing(self):
         app = self.navigation_app(disabled_target_after=0.5)
         self.assertFalse(app.enter_system(timeout=4))
-        app.click_at.assert_called_once()
+        app.double_click_at.assert_called_once()
 
     def test_enter_system_short_timeout_limits_retries(self):
         app = self.navigation_app()
         self.assertFalse(app.enter_system(timeout=1))
-        app.click_at.assert_called_once()
+        app.double_click_at.assert_called_once()
 
     def test_missing_confirm_skips_without_sleep(self):
         app = DtsApp()

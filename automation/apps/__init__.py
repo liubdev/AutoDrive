@@ -497,6 +497,18 @@ class BaseApp:
         except Exception:
             return False
 
+    def double_click_at(self, x: int, y: int) -> bool:
+        """后台投递双击消息；前台使用鼠标双击。"""
+        if self.background:
+            return bg.click_at(self._hwnd(), x, y, double=True)
+        try:
+            from pywinauto import mouse
+
+            mouse.double_click(coords=(x, y))
+            return True
+        except Exception:
+            return False
+
     def set_focus_bg(self, ctrl) -> bool:
         """聚焦控件：后台=AttachThreadInput+SetFocus（不抢前台）；前台=UIA set_focus"""
         if self.background:

@@ -214,7 +214,7 @@ class DtsApp(BaseApp):
         last_reason = None
         while time.monotonic() < deadline:
             if self._ready_control(**target) is not None:
-                logger.info("点击进入系统: 目标页面已就绪（共点击 %d 次）", attempts)
+                logger.info("点击进入系统: 目标页面已就绪（共双击 %d 次）", attempts)
                 return True
             target_detail = getattr(self, "_last_control_probe", "未就绪")
             target_visible = self._ready_control(require_enabled=False, **target) is not None
@@ -228,7 +228,7 @@ class DtsApp(BaseApp):
             elif anchor is None:
                 reason = f"原页面锚点{source_detail}；目标{target_detail}"
             elif attempts >= 3:
-                reason = "已达 3 次点击上限，等待目标页面"
+                reason = "已达 3 次双击上限，等待目标页面"
             elif now < next_click:
                 reason = "等待点击后的 1.5s 切换间隔"
             else:
@@ -240,11 +240,11 @@ class DtsApp(BaseApp):
                         r = anchor.rectangle()
                         if self._ready_control(require_enabled=False, **target) is None:
                             attempts += 1
-                            logger.info("点击进入系统: 原页面仍可操作，点击 %d/3（锚点=%s，容器=%s）",
+                            logger.info("点击进入系统: 原页面仍可操作，双击 %d/3（锚点=%s，容器=%s）",
                                         attempts, anchor.handle, parent.handle)
-                            if not self.click_at(r.left + int(r.width() * 0.066),
+                            if not self.double_click_at(r.left + int(r.width() * 0.066),
                                                  r.bottom + int(r.height() * 1.66)):
-                                logger.warning("点击进入系统: 第 %d 次点击投递失败", attempts)
+                                logger.warning("点击进入系统: 第 %d 次双击投递失败", attempts)
                             next_click = time.monotonic() + 1.5
                         else:
                             reason = "点击前目标窗格已出现，取消补点"
@@ -254,7 +254,7 @@ class DtsApp(BaseApp):
                 logger.info("点击进入系统: 暂不补点：%s", reason)
             last_reason = reason
             time.sleep(0.2)
-        logger.error("点击进入系统: %ss 内目标页面未就绪（点击 %d/3 次），停止流程",
+        logger.error("点击进入系统: %ss 内目标页面未就绪（双击 %d/3 次），停止流程",
                      timeout, attempts)
         return False
 

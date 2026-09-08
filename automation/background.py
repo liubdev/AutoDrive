@@ -34,6 +34,7 @@ kernel32 = ctypes.windll.kernel32
 # ── 常量 ──────────────────────────────────────────────
 WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SETTEXT = 0x0100, 0x0101, 0x0102, 0x000C
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP = 0x0200, 0x0201, 0x0202
+WM_LBUTTONDBLCLK = 0x0203
 MK_LBUTTON = 0x0001
 WM_BM_CLICK = 0x00F5            # BM_CLICK：程序化触发标准按钮（不依赖 UIA/命中测试）
 GA_ROOT = 2                     # GetAncestor 标志：取根（最顶层）窗口
@@ -308,8 +309,8 @@ def _deepest_child(hwnd_top: int, sx: int, sy: int):
     return 0
 
 
-def click_at(hwnd_top: int, sx: int, sy: int) -> bool:
-    """屏幕坐标 → 消息式左键单击（替代物理 mouse.click）"""
+def click_at(hwnd_top: int, sx: int, sy: int, double: bool = False) -> bool:
+    """屏幕坐标 → 消息式左键单击或双击，整组消息固定投递给同一窗口"""
     if not hwnd_top:
         return False
     target = _deepest_child(hwnd_top, sx, sy)
@@ -321,7 +322,16 @@ def click_at(hwnd_top: int, sx: int, sy: int) -> bool:
     user32.SendMessageW(target, WM_MOUSEMOVE, 0, lp)
     user32.SendMessageW(target, WM_LBUTTONDOWN, MK_LBUTTON, lp)
     user32.SendMessageW(target, WM_LBUTTONUP, 0, lp)
-    logger.info("坐标点击 (%d,%d) → 子窗口0x%X 客户区(%d,%d)", sx, sy, target, cx, cy)
+    if double:
+        # Win32 双击序列：DOWN、UP、DBLCLK、UP。
+        # 第一击后不重新命中，防止第二击被投递到新页面。
+        if not user32.IsWindow(target):
+            logger.warning("坐标双击: 第一击后目标窗口已销毁，停止投递")
+            return False
+        user32.SendMessageW(target, WM_LBUTTONDBLCLK, MK_LBUTTON, lp)
+        user32.SendMessageW(target, WM_LBUTTONUP, 0, lp)
+    logger.info("坐标%s (%d,%d) → 子窗口0x%X 客户区(%d,%d)",
+                "双击" if double else "点击", sx, sy, target, cx, cy)
     return True
 
 
