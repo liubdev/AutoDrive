@@ -85,6 +85,7 @@ _declare("ClientToScreen", wintypes.BOOL,
          [wintypes.HWND, ctypes.POINTER(wintypes.POINT)])
 _declare("ChildWindowFromPointEx", wintypes.HWND,
          [wintypes.HWND, wintypes.POINT, wintypes.UINT])
+_declare("GetParent", wintypes.HWND, [wintypes.HWND])
 _declare("GetWindowRect", wintypes.BOOL,
          [wintypes.HWND, ctypes.POINTER(wintypes.RECT)])
 _declare("SetWindowPos", wintypes.BOOL,
@@ -309,14 +310,23 @@ def _deepest_child(hwnd_top: int, sx: int, sy: int):
     return 0
 
 
-def click_at(hwnd_top: int, sx: int, sy: int, double: bool = False) -> bool:
-    """屏幕坐标 → 消息式左键单击或双击，整组消息固定投递给同一窗口"""
-    if not hwnd_top:
-        return False
-    target = _deepest_child(hwnd_top, sx, sy)
-    if not target:
-        logger.warning("坐标点击 (%d,%d): 未命中可操作子窗口", sx, sy)
-        return False
+def _ancestor_by_class(hwnd: int, class_name: str) -> int:
+    """从窗口向父级回溯，返回最近的指定窗口类。"""
+    current = hwnd
+    for _ in range(32):
+        if not current:
+            return 0
+        if window_class(current) == class_name:
+            return current
+        parent = user32.GetParent(current)
+        if not parent or parent == current:
+            return 0
+        current = parent
+    return 0
+
+
+def _send_click(target: int, sx: int, sy: int, double: bool = False) -> bool:
+    """向指定窗口投递完整的鼠标单击序列。"""
     cx, cy = _screen_to_client(target, sx, sy)
     lp = (cy << 16) | (cx & 0xFFFF)
     user32.SendMessageW(target, WM_MOUSEMOVE, 0, lp)
@@ -333,6 +343,35 @@ def click_at(hwnd_top: int, sx: int, sy: int, double: bool = False) -> bool:
     logger.info("坐标%s (%d,%d) → 子窗口0x%X 客户区(%d,%d)",
                 "双击" if double else "点击", sx, sy, target, cx, cy)
     return True
+
+
+def click_at(hwnd_top: int, sx: int, sy: int, double: bool = False) -> bool:
+    """屏幕坐标 → 最深子窗口的消息式左键单击或双击。"""
+    if not hwnd_top:
+        return False
+    target = _deepest_child(hwnd_top, sx, sy)
+    if not target:
+        logger.warning("坐标点击 (%d,%d): 未命中可操作子窗口", sx, sy)
+        return False
+    return _send_click(target, sx, sy, double=double)
+
+
+def click_at_ancestor(hwnd_top: int, sx: int, sy: int, class_name: str) -> bool:
+    """按坐标命中后，将点击投递给最近的指定类父容器。"""
+    if not hwnd_top:
+        return False
+    hit = _deepest_child(hwnd_top, sx, sy)
+    if not hit:
+        logger.warning("容器坐标点击 (%d,%d): 未命中可操作子窗口", sx, sy)
+        return False
+    target = _ancestor_by_class(hit, class_name)
+    if not target:
+        logger.warning("容器坐标点击 (%d,%d): 命中0x%X但未找到%s父容器",
+                       sx, sy, hit, class_name)
+        return False
+    logger.info("容器坐标点击 (%d,%d): 命中0x%X → %s容器0x%X",
+                sx, sy, hit, class_name, target)
+    return _send_click(target, sx, sy)
 
 
 def _ctrl_hwnd(ctrl) -> int:

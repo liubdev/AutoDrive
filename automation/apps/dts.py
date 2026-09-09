@@ -203,20 +203,32 @@ class DtsApp(BaseApp):
                                 control_type="Text") is not None
 
     def enter_system(self, timeout: int = 30) -> bool:
-        """在「一键进入」后的同一固定位置再单击一次。
+        """在「一键进入」后的左上入口单击一次。
 
-        DTS 对「当前设置/车下使用」的 UIA Invoke 在后台模式下不稳定，因此沿用
-        已验证可用的消息式坐标点击。下一步会等待发动机系统诊断页面就绪。
+        以「当前设置:车下使用」标题文本为锚点计算入口偏移。入口是自绘内容，
+        点击命中的是页面 #32770 容器而非独立按钮；消息需投递给该容器，不能落到
+        坐标下最深的子窗口。下一步会等待发动机系统诊断页面就绪。
         """
         if not self._reconnect_main(timeout):
             return False
         # Step 3 刚完成页面切换，先让 DTS 接收完第一次消息点击。
-        logger.info("点击进入系统: 一键进入后等待 1.0s，再点击车下使用")
+        logger.info("点击进入系统: 一键进入后等待 1.0s，再点击左上入口")
         time.sleep(1)
-        if not self._click_image_btn(rx=0.573, ry=0.178, settle=0):
-            logger.warning("点击进入系统: 固定位置点击投递失败")
+        anchor = self._wait_ready(
+            min(5, timeout), auto_id="1185", title="当前设置:车下使用",
+            control_type="Text"
+        )
+        if anchor is None:
+            logger.warning("点击进入系统: 未找到页面标题锚点")
             return False
-        logger.info("点击进入系统: 已在一键进入相同位置单击，交由下一步等待页面加载")
+        rect = anchor.rectangle()
+        # Inspect 实测标题 (20,51)-(1900,89)，入口点 (280,154)。
+        x = rect.left + round(rect.width() * 260 / 1880)
+        y = rect.bottom + round(rect.height() * 65 / 38)
+        if not bg.click_at_ancestor(self._hwnd(), x, y, "#32770"):
+            logger.warning("点击进入系统: 页面容器点击投递失败")
+            return False
+        logger.info("点击进入系统: 已点击页面容器左上入口 (%d,%d)，交由下一步等待加载", x, y)
         return True
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
