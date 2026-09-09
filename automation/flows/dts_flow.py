@@ -151,7 +151,7 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     # 动作内部负责页面就绪验证，避免重复等待旧版控件或重放已成功的点击。
     steps.append(FlowStep("确认", action=lambda: app.confirm(timeout=20)))
     steps.append(FlowStep("一键进入", action=lambda: app.one_click_enter(timeout=20)))
-    steps.append(FlowStep("点击进入系统", action=lambda: app.enter_system(timeout=20)))
+    steps.append(FlowStep("点击进入系统", action=lambda: app.enter_system(timeout=30)))
     steps.append(FlowStep("发动机系统诊断",
                           action=lambda: app.diagnose_engine_system(timeout=30)))
     steps.append(FlowStep("直接进入", action=lambda: app.direct_enter(timeout=20)))

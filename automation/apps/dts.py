@@ -203,66 +203,54 @@ class DtsApp(BaseApp):
                                 control_type="Text") is not None
 
     def enter_system(self, timeout: int = 30) -> bool:
-        """等待帮助页 infoIcon 可见后双击入口；目标出现后停止投递。"""
+        """进入系统并等待 DTS 完成页面加载。
+
+        「当前设置/车下使用」本身是可 Invoke 的 Button（auto_id=6），不能再用
+        文本锚点推算坐标双击。DTS 接收点击后会持续加载一段时间，加载期间不补点，
+        防止多余点击被下一页接收。
+        """
         deadline = time.monotonic() + timeout
         if not self._reconnect_main(timeout):
             return False
-        target = dict(auto_id="1033", class_name="AfxWnd80su", control_type="Pane")
-        source = dict(auto_id="1185", title="当前设置:车下使用", control_type="Text")
-        marker = dict(auto_id="infoIcon", title="信息图标", control_type="Image")
-        attempts = 0
-        next_click = 0.0
-        last_reason = None
-        while time.monotonic() < deadline:
+        source = dict(auto_id="6", control_type="Button")
+        target = dict(auto_id="1046", title="重启诊断", control_type="Button")
+
+        if self._ready_control(**target) is not None:
+            logger.info("点击进入系统: 目标页面已就绪，跳过点击")
+            return True
+
+        # Step 3 刚完成页面切换，先让 UIA 树与按钮状态稳定下来。
+        logger.info("点击进入系统: 一键进入后等待 1.0s，再点击车下使用")
+        time.sleep(1)
+
+        for attempt in range(1, 3):
             if self._ready_control(**target) is not None:
-                logger.info("点击进入系统: 目标页面已就绪（共双击 %d 次）", attempts)
+                logger.info("点击进入系统: 目标页面已就绪（点击 %d 次）", attempt - 1)
                 return True
-            target_detail = getattr(self, "_last_control_probe", "未就绪")
-            target_visible = self._ready_control(require_enabled=False, **target) is not None
-            # 文字仅作定位，不以文字本身的 enabled 状态决定能否操作页面。
-            anchor = self._ready_control(require_enabled=False, **source)
-            source_detail = getattr(self, "_last_control_probe", "未就绪")
-            icon = self._ready_control(require_enabled=False, **marker)
-            icon_detail = getattr(self, "_last_control_probe", "未就绪")
-            now = time.monotonic()
-            reason = None
-            if target_visible:
-                reason = "目标窗格已显示但尚不可用"
-            elif icon is None:
-                reason = f"等待信息图标 infoIcon 可见：{icon_detail}"
-            elif anchor is None:
-                reason = f"原页面锚点{source_detail}；目标{target_detail}"
-            elif attempts >= 3:
-                reason = "已达 3 次双击上限，等待目标页面"
-            elif now < next_click:
-                reason = "等待点击后的 1.5s 切换间隔"
-            else:
-                try:
-                    parent = anchor.parent()
-                    if not parent.is_visible() or not parent.is_enabled():
-                        reason = "原页面容器不可见或不可用"
-                    else:
-                        r = anchor.rectangle()
-                        if self._ready_control(require_enabled=False, **marker) is None:
-                            reason = "双击前 infoIcon 已消失，继续等待"
-                        elif self._ready_control(require_enabled=False, **target) is None:
-                            attempts += 1
-                            logger.info("点击进入系统: infoIcon 已可见且原页面可操作，双击 %d/3（锚点=%s，容器=%s）",
-                                        attempts, anchor.handle, parent.handle)
-                            if not self.double_click_at(r.left + int(r.width() * 0.066),
-                                                 r.bottom + int(r.height() * 1.66)):
-                                logger.warning("点击进入系统: 第 %d 次双击投递失败", attempts)
-                            next_click = time.monotonic() + 1.5
-                        else:
-                            reason = "点击前目标窗格已出现，取消补点"
-                except Exception as exc:
-                    reason = f"页面控件查询失败: {exc}"
-            if reason is not None and reason != last_reason:
-                logger.info("点击进入系统: 暂不补点：%s", reason)
-            last_reason = reason
-            time.sleep(0.2)
-        logger.error("点击进入系统: %ss 内目标页面未就绪（双击 %d/3 次），停止流程",
-                     timeout, attempts)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            button = self._wait_ready(min(5, remaining), **source)
+            if button is None:
+                break
+            logger.info("点击进入系统: Invoke 当前设置/车下使用 %d/2（控件=0x%X）",
+                        attempt, button.handle)
+            if not self.click_ctrl(button):
+                logger.warning("点击进入系统: 第 %d 次按钮 Invoke 失败", attempt)
+                continue
+
+            # 一次点击后给 DTS 完整的加载时间；期间绝不继续发送点击。
+            remaining = deadline - time.monotonic()
+            load_wait = min(12, max(0, remaining))
+            if load_wait and self._wait_ready(load_wait, **target) is not None:
+                logger.info("点击进入系统: DTS 加载完成，重启诊断按钮已出现")
+                return True
+            if attempt < 2:
+                logger.warning("点击进入系统: 等待 %.1fs 后仍未进入目标页，准备单击重试",
+                               load_wait)
+
+        logger.error("点击进入系统: %ss 内目标页面未就绪（单击最多 2 次），停止流程",
+                     timeout)
         return False
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
