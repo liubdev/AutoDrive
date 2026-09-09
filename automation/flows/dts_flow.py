@@ -144,6 +144,8 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     Returns:
         list[FlowStep]
     """
+    # 供步骤级诊断截图与采集产物归档到同一份报告目录。
+    app.run_output_dir = out_dir
     steps = []
 
     # 每次完整采集先清理旧实例，从启动确认页重新执行。

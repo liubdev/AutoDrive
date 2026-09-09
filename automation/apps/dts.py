@@ -19,6 +19,7 @@ DTS 应用自动化模块
 import logging
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 from pywinauto.findwindows import find_elements
 
@@ -225,11 +226,40 @@ class DtsApp(BaseApp):
         # Inspect 实测标题 (20,51)-(1900,89)，入口点 (280,154)。
         x = rect.left + round(rect.width() * 260 / 1880)
         y = rect.bottom + round(rect.height() * 65 / 38)
+        self._save_enter_system_click_screenshot(x, y)
         if not bg.click_at_ancestor(self._hwnd(), x, y, "#32770"):
             logger.warning("点击进入系统: 页面容器点击投递失败")
             return False
         logger.info("点击进入系统: 已点击页面容器左上入口 (%d,%d)，交由下一步等待加载", x, y)
         return True
+
+    def _save_enter_system_click_screenshot(self, x: int, y: int) -> None:
+        """保存 Step 4 点击前的屏幕截图，并标注实际消息投递坐标。"""
+        try:
+            from PIL import Image, ImageDraw
+            from vision.screenshot import ScreenCapture
+
+            out_dir = Path(getattr(self, "run_output_dir", settings.reports_dir))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            output = out_dir / "step4_enter_system_click.png"
+            ScreenCapture().fullscreen(str(output))
+
+            image = Image.open(output).convert("RGB")
+            draw = ImageDraw.Draw(image)
+            radius = 14
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius),
+                         outline="#ff1f1f", width=4)
+            draw.line((x - 26, y, x + 26, y), fill="#ff1f1f", width=3)
+            draw.line((x, y - 26, x, y + 26), fill="#ff1f1f", width=3)
+            label = f"CLICK ({x}, {y})"
+            label_x, label_y = x + 22, max(4, y - 34)
+            draw.rectangle((label_x - 4, label_y - 3, label_x + 122, label_y + 16),
+                           fill="#ffffff", outline="#ff1f1f", width=2)
+            draw.text((label_x, label_y), label, fill="#cc0000")
+            image.save(output)
+            logger.info("点击进入系统: 已保存点击标注截图: %s", output)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("点击进入系统: 保存点击标注截图失败: %s", exc)
 
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
         target = dict(auto_id="1058", title="直接进入", control_type="Button")
