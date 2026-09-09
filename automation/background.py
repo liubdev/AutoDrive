@@ -374,6 +374,30 @@ def click_at_ancestor(hwnd_top: int, sx: int, sy: int, class_name: str) -> bool:
     return _send_click(target, sx, sy)
 
 
+def foreground_click_at(hwnd: int, sx: int, sy: int) -> bool:
+    """临时将窗口置于最上层并执行一次真实鼠标点击，随后恢复普通层级。"""
+    if not hwnd:
+        return False
+    try:
+        # AutoDrive 自身是 TOPMOST，仅设置前台不足以让真实鼠标命中 DTS。
+        set_topmost(hwnd, True)
+        if not force_foreground(hwnd):
+            logger.warning("真实鼠标点击: DTS 无法切换到前台 0x%X", hwnd)
+            return False
+        time.sleep(0.2)
+        from pywinauto import mouse
+
+        mouse.click(coords=(sx, sy))
+        logger.info("真实鼠标点击 (%d,%d) → DTS 0x%X", sx, sy, hwnd)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("真实鼠标点击失败 (%d,%d): %s", sx, sy, exc)
+        return False
+    finally:
+        # DTS 不再需要真实输入后恢复普通层级，AutoDrive 的 TOPMOST 重新生效。
+        set_topmost(hwnd, False)
+
+
 def _ctrl_hwnd(ctrl) -> int:
     """取 pywinauto 控件的真实窗口句柄（wrapper.handle，降级 element_info.handle）"""
     try:

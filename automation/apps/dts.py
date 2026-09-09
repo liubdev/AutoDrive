@@ -227,10 +227,10 @@ class DtsApp(BaseApp):
         x = rect.left + round(rect.width() * 260 / 1880)
         y = rect.bottom + round(rect.height() * 65 / 38)
         self._save_enter_system_click_screenshot(x, y)
-        if not bg.click_at_ancestor(self._hwnd(), x, y, "#32770"):
-            logger.warning("点击进入系统: 页面容器点击投递失败")
+        if not bg.foreground_click_at(self._hwnd(), x, y):
+            logger.warning("点击进入系统: DTS 真实鼠标点击失败")
             return False
-        logger.info("点击进入系统: 已点击页面容器左上入口 (%d,%d)，交由下一步等待加载", x, y)
+        logger.info("点击进入系统: 已完成真实鼠标点击 (%d,%d)，交由下一步等待加载", x, y)
         return True
 
     def _save_enter_system_click_screenshot(self, x: int, y: int) -> None:
