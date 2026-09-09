@@ -128,6 +128,41 @@ class DtsApp(BaseApp):
         logger.error("等待 DTS 页面超时: %s", selector)
         return None
 
+    def _ready_nested_button(self, auto_id: str, *name_parts: str):
+        """查找主窗口或其嵌套 DTS 对话框中的可用按钮。"""
+        ctrl = self._ready_control(
+            auto_id=auto_id, control_type="Button", found_index=0
+        )
+        if ctrl is not None:
+            return ctrl
+        try:
+            from pywinauto import Desktop
+
+            root = Desktop(backend="uia").window(handle=self._hwnd())
+            for button in root.descendants(control_type="Button"):
+                info = button.element_info
+                if str(getattr(info, "automation_id", "")) != auto_id:
+                    continue
+                name = (button.window_text() or "").replace("\r", "").replace("\n", "")
+                if (all(part in name for part in name_parts)
+                        and button.is_visible() and button.is_enabled()):
+                    logger.info("通过嵌套 UIA 树定位按钮 id=%s name=%r", auto_id, name)
+                    return button
+        except Exception as exc:  # noqa: BLE001
+            self._last_control_probe = f"嵌套按钮查询失败: {exc}"
+        return None
+
+    def _wait_nested_button(self, timeout: float, auto_id: str, *name_parts: str):
+        """等待可用按钮，支持 DTS 嵌套 #32770 对话框。"""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            button = self._ready_nested_button(auto_id, *name_parts)
+            if button is not None:
+                return button
+            time.sleep(0.2)
+        logger.error("等待 DTS 按钮超时: id=%s name=%s", auto_id, name_parts)
+        return None
+
     def _home_anchor(self):
         # 翻页按钮在只有一页时可能禁用，仍可用作定位锚点。
         ctrl = self._ready_control(require_enabled=False, auto_id="1013",
@@ -212,10 +247,12 @@ class DtsApp(BaseApp):
         deadline = time.monotonic() + timeout
         if not self._reconnect_main(timeout):
             return False
-        source = dict(auto_id="6", control_type="Button")
-        target = dict(auto_id="1046", title="重启诊断", control_type="Button")
+        source_id = "6"
+        source_name = ("当前设置", "车下使用")
+        target_id = "1046"
+        target_name = ("重启诊断",)
 
-        if self._ready_control(**target) is not None:
+        if self._ready_nested_button(target_id, *target_name) is not None:
             logger.info("点击进入系统: 目标页面已就绪，跳过点击")
             return True
 
@@ -224,13 +261,13 @@ class DtsApp(BaseApp):
         time.sleep(1)
 
         for attempt in range(1, 3):
-            if self._ready_control(**target) is not None:
+            if self._ready_nested_button(target_id, *target_name) is not None:
                 logger.info("点击进入系统: 目标页面已就绪（点击 %d 次）", attempt - 1)
                 return True
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            button = self._wait_ready(min(5, remaining), **source)
+            button = self._wait_nested_button(min(5, remaining), source_id, *source_name)
             if button is None:
                 break
             logger.info("点击进入系统: Invoke 当前设置/车下使用 %d/2（控件=0x%X）",
@@ -242,7 +279,8 @@ class DtsApp(BaseApp):
             # 一次点击后给 DTS 完整的加载时间；期间绝不继续发送点击。
             remaining = deadline - time.monotonic()
             load_wait = min(12, max(0, remaining))
-            if load_wait and self._wait_ready(load_wait, **target) is not None:
+            if (load_wait and self._wait_nested_button(
+                    load_wait, target_id, *target_name) is not None):
                 logger.info("点击进入系统: DTS 加载完成，重启诊断按钮已出现")
                 return True
             if attempt < 2:
