@@ -285,6 +285,13 @@ class DtsApp(BaseApp):
         if not self.click_at(r.left + round(r.width() * 175 / 1883),
                              r.top + round(r.height() * 22 / 829)):
             return False
+        time.sleep(0.5)
+        # 坐标点击只负责选中诊断项；DTS 还需要列表焦点上的 Enter 才会进入扫描。
+        if not self.set_focus_bg(pane):
+            logger.warning("发动机系统诊断: 列表窗格焦点设置失败，仍尝试发送 Enter")
+        logger.info("发动机系统诊断: 已选中诊断项，发送 Enter 进入扫描")
+        if not self.send_enter(timeout=min(15, timeout)):
+            return False
         return self._wait_ready(timeout, **target) is not None
 
     def direct_enter(self, timeout: int = 20) -> bool:
