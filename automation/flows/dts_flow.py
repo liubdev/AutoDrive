@@ -151,16 +151,38 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     steps = []
 
     # 每次完整采集先清理旧实例，从启动确认页重新执行。
-    steps.append(FlowStep("启动 DTS", action=lambda: app.restart_for_diagnosis()))
-    steps.append(FlowStep("确认", action=lambda: app.confirm()))
-    steps.append(FlowStep("一键进入", action=lambda: app.one_click_enter(timeout=30)))
-    steps.append(FlowStep("点击进入系统", action=lambda: app.enter_system(timeout=30)))
+    steps.append(FlowStep(
+        "启动 DTS", action=lambda: app.restart_for_diagnosis(),
+        expected_action="结束旧 DTS，启动 DTS650 并等待启动确认页",
+        failure_hint="检查 dts_exe 路径、权限和旧 DTS 进程是否已退出",
+    ))
+    steps.append(FlowStep(
+        "确认", action=lambda: app.confirm(),
+        expected_action="点击 DTS 启动确认按钮并等待主页就绪",
+        failure_hint="检查确认弹窗是否存在、DTS 是否获得消息焦点",
+    ))
+    steps.append(FlowStep(
+        "一键进入", action=lambda: app.one_click_enter(timeout=30),
+        expected_action="点击左上‘一键进入’一次，并等待当前设置标题出现",
+        failure_hint="查看一键进入锚点 1013 是否存在，核对点击坐标截图",
+    ))
+    steps.append(FlowStep(
+        "点击进入系统", action=lambda: app.enter_system(timeout=30),
+        expected_action="点击左上‘点击进入系统’一次，并等待重启诊断按钮出现",
+        failure_hint="检查 Step 4 标注截图、DTS 前台真实点击和入口加载状态",
+    ))
     steps.append(
         FlowStep(
-            "发动机系统诊断", action=lambda: app.diagnose_engine_system(timeout=30)
+            "发动机系统诊断", action=lambda: app.diagnose_engine_system(timeout=30),
+            expected_action="选中发动机系统诊断，设置列表焦点并发送 Enter",
+            failure_hint="确认诊断列表 1033 出现且焦点落在列表，再检查 Enter 是否生效",
         )
     )
-    steps.append(FlowStep("直接进入", action=lambda: app.direct_enter(timeout=30)))
+    steps.append(FlowStep(
+        "直接进入", action=lambda: app.direct_enter(timeout=30),
+        expected_action="点击‘直接进入’按钮并等待诊断页稳定",
+        failure_hint="检查 1058 按钮是否出现、是否被加载中的旧页面遮挡",
+    ))
 
     # ── 第7步: 发动机2.0T ──
     steps.append(

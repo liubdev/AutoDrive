@@ -418,7 +418,15 @@ class MainWindow(QMainWindow):
 
     def _on_step_error(self, step):
         reason = getattr(step, "error", None)
-        msg = f"步骤失败: {step.name}" + (f"（{reason}）" if reason else "")
+        expected = getattr(step, "expected_action", "")
+        hint = getattr(step, "failure_hint", "")
+        msg = f"步骤失败: {step.name}"
+        if reason:
+            msg += f"（{reason}）"
+        if expected:
+            msg += f"；预期: {expected}"
+        if hint:
+            msg += f"；建议: {hint}"
         self.ai_diag.append_dyn(msg, cls="error")
 
     def _on_flow_done(self, engine):

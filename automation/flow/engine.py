@@ -63,6 +63,8 @@ class FlowStep:
         retry: int = 1,
         timeout: int = 30,
         continue_on_missing: bool = False,
+        expected_action: Optional[str] = None,
+        failure_hint: Optional[str] = None,
     ):
         """
         Args:
@@ -73,6 +75,8 @@ class FlowStep:
             timeout: 本步骤验证控件的超时秒数
             continue_on_missing: True=验证控件未出现时跳过该验证、继续下一步
                                  （软件版本间控件 ID 可能不同）；False=未出现则失败
+            expected_action: 日志中展示的预期动作；为空时使用步骤名称
+            failure_hint: 失败后给操作者的建议；为空时根据失败阶段生成
         """
         self.name = name
         self.action = action
@@ -80,11 +84,14 @@ class FlowStep:
         self.retry = retry
         self.timeout = timeout
         self.continue_on_missing = continue_on_missing
+        self.expected_action = expected_action or f"执行「{name}」操作"
+        self.failure_hint = failure_hint or "检查 DTS 页面状态、焦点和目标控件后重试"
 
         # 运行时状态
         self.status = PENDING
         self.attempt = 0
         self.error: Optional[str] = None
+        self.failure_stage: Optional[str] = None
 
 
 class _EngineLogHandler(logging.Handler):
@@ -171,6 +178,7 @@ class FlowEngine:
             step.status = PENDING
             step.error = None
             step.attempt = 0
+            step.failure_stage = None
 
         self._emit("flow_start", self)
         total = len(self.steps)
@@ -196,7 +204,12 @@ class FlowEngine:
 
                 self.current = step
                 step.status = RUNNING
-                self.log(f"  → 步骤 {i + 1}/{total}: {step.name}")
+                step_prefix = f"[STEP {i + 1:02d}/{total:02d}]"
+                self.log(f"  → {step_prefix} {step.name}")
+                self.log(f"    预期动作: {step.expected_action}")
+                if step.verify:
+                    verify_desc = self._verify_description(step.verify)
+                    self.log(f"    预期结果: {verify_desc}")
                 t0 = time.time()
                 self._emit("step_start", step)
 
@@ -210,7 +223,8 @@ class FlowEngine:
                         f"步骤「{step.name}」执行失败，流程中止"
                     )
                     break
-                self.log(f"    ✓ {step.name} 完成 ({time.time() - t0:.1f}s)")
+                self.log(f"    ✓ {step_prefix} 实际结果: {step.name} 完成 "
+                         f"({time.time() - t0:.1f}s)")
         finally:
             self.done = True
             if self.cancelled:
@@ -235,12 +249,14 @@ class FlowEngine:
             try:
                 # 1. 执行动作
                 if step.action is not None:
+                    step.failure_stage = "action"
                     result = step.action()
                     if not result:
                         raise RuntimeError("动作执行失败")
 
                 # 2. 验证控件出现
                 if step.verify and verify_app is not None:
+                    step.failure_stage = "verify"
                     v = step.verify
                     timeout = v.get("timeout", step.timeout)
                     if step.continue_on_missing:
@@ -262,6 +278,7 @@ class FlowEngine:
                             step.error = None
                             self._emit("step_done", step)
                             return True
+                        step.failure_stage = "verify"
                         raise RuntimeError(f"验证控件 {v['auto_id']} 未出现")
 
                 step.status = DONE
@@ -271,12 +288,26 @@ class FlowEngine:
 
             except Exception as e:
                 step.error = str(e)
-                self.log(f"  步骤失败(第{attempt+1}/{step.retry}次): {e}", "warning")
+                stage = "动作阶段" if step.failure_stage == "action" else "验证阶段"
+                self.log(f"  ✗ 实际失败 [{stage}] (第{attempt+1}/{step.retry}次): {e}",
+                         "warning")
+                if attempt >= step.retry - 1:
+                    self.log(f"  失败后应执行: {step.failure_hint}", "error")
                 if attempt < step.retry - 1:
                     time.sleep(1)
 
         step.status = ERROR
         return False
+
+    @staticmethod
+    def _verify_description(verify: dict) -> str:
+        """将控件验证条件转换为人可读的预期结果。"""
+        parts = [f"控件 id={verify.get('auto_id', '')}"]
+        if verify.get("control_type"):
+            parts.append(f"类型={verify['control_type']}")
+        if verify.get("title"):
+            parts.append(f"标题={verify['title']}")
+        return "，".join(parts) + "出现并可用"
 
     # ── 便捷：后台线程执行 ────────────────────────
 
