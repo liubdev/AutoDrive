@@ -401,22 +401,26 @@ def foreground_click_at(hwnd: int, sx: int, sy: int) -> bool:
         set_topmost(hwnd, False)
 
 
-def foreground_press_enter(hwnd: int) -> bool:
-    """临时激活 DTS 后发送一次真实 Enter，再恢复普通层级。"""
+def foreground_click_then_enter(hwnd: int, sx: int, sy: int) -> bool:
+    """在同一个 DTS 前台会话内点击目标并立即发送一次 Enter。"""
     if not hwnd:
         return False
     try:
         set_topmost(hwnd, True)
         if not force_foreground(hwnd):
-            logger.warning("真实 Enter: DTS 无法切换到前台 0x%X", hwnd)
+            logger.warning("真实点击+Enter: DTS 无法切换到前台 0x%X", hwnd)
             return False
         time.sleep(0.2)
+        from pywinauto import mouse
+
+        mouse.click(coords=(sx, sy))
+        time.sleep(0.5)
         user32.keybd_event(0x0D, 0, 0, 0)
         user32.keybd_event(0x0D, 0, 2, 0)
-        logger.info("真实 Enter → DTS 0x%X", hwnd)
+        logger.info("真实鼠标点击 (%d,%d)+Enter → DTS 0x%X", sx, sy, hwnd)
         return True
     except Exception as exc:  # noqa: BLE001
-        logger.warning("真实 Enter 发送失败: %s", exc)
+        logger.warning("真实点击+Enter失败 (%d,%d): %s", sx, sy, exc)
         return False
     finally:
         set_topmost(hwnd, False)

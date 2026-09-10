@@ -352,18 +352,11 @@ class DtsApp(BaseApp):
         logger.info("发动机系统诊断: 默认选中项，先点击列表项建立焦点 (%d,%d)", x, y)
         if not self._click_with_trace(
             "engine_diagnosis_item", x, y,
-            lambda: bg.foreground_click_at(self._hwnd(), x, y),
+            lambda: bg.foreground_click_then_enter(self._hwnd(), x, y),
         ):
-            logger.error("发动机系统诊断: 列表项真实鼠标点击失败")
+            logger.error("发动机系统诊断: 列表项点击或 Enter 失败")
             return False
-        time.sleep(0.5)
-        if self.background:
-            entered = bool(bg.foreground_press_enter(self._hwnd()))
-            logger.info("发动机系统诊断: 真实 Enter x1 (发送=%s)", entered)
-        else:
-            entered = bool(self.send_enter(timeout=min(15, timeout)))
-        if not entered:
-            return False
+        logger.info("发动机系统诊断: 列表项点击后已在同一前台会话发送真实 Enter")
         return self._wait_ready(timeout, **target) is not None
 
     def direct_enter(self, timeout: int = 20) -> bool:
