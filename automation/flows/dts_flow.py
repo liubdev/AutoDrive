@@ -460,8 +460,15 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
     log.info("点击 保存列表 按钮")
     if app.click_ctrl(save_btn):
         if not app.drive_file_dialog(file_name, mode="save", timeout=10):
-            log.warning("保存列表文件对话框处理失败")
-            return False
+            log.warning("保存列表文件对话框未响应，重新点击一次")
+            save_btn = app.window.child_window(
+                auto_id="1013", control_type="Button", found_index=0
+            )
+            if not app.click_ctrl(save_btn) or not app.drive_file_dialog(
+                file_name, mode="save", timeout=10
+            ):
+                log.warning("保存列表文件对话框处理失败")
+                return False
     else:
         log.warning("点击 保存列表 按钮失败")
         return False
@@ -473,8 +480,15 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
     log.info("点击 载入列表 按钮")
     if app.click_ctrl(load_btn):
         if not app.drive_file_dialog(file_name, mode="load", timeout=10):
-            log.warning("载入列表文件对话框处理失败")
-            return False
+            log.warning("载入列表文件对话框未响应，重新点击一次")
+            load_btn = app.window.child_window(
+                auto_id="1118", control_type="Button", found_index=0
+            )
+            if not app.click_ctrl(load_btn) or not app.drive_file_dialog(
+                file_name, mode="load", timeout=10
+            ):
+                log.warning("载入列表文件对话框处理失败")
+                return False
         # 载入后 DTS 渲染已载入的数据流列表需要一点时间（原写死 sleep(10)）
         time.sleep(5)
     else:
