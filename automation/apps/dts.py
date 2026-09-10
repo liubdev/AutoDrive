@@ -286,11 +286,22 @@ class DtsApp(BaseApp):
                              r.top + round(r.height() * 22 / 829)):
             return False
         time.sleep(0.5)
-        # 坐标点击只负责选中诊断项；DTS 还需要列表焦点上的 Enter 才会进入扫描。
-        if not self.set_focus_bg(pane):
-            logger.warning("发动机系统诊断: 列表窗格焦点设置失败，仍尝试发送 Enter")
-        logger.info("发动机系统诊断: 已选中诊断项，发送 Enter 进入扫描")
-        if not self.send_enter(timeout=min(15, timeout)):
+        # 坐标点击只负责选中诊断项；DTS 还需要列表窗格上的 Enter 才会进入扫描。
+        # 该 AfxWnd80su 窗格可能不可 SetFocus，必须禁止按键回退到旧焦点。
+        try:
+            pane_hwnd = int(pane.handle)
+        except Exception:
+            pane_hwnd = 0
+        logger.info("发动机系统诊断: 已选中诊断项，Enter 目标窗格=0x%X", pane_hwnd)
+        if self.background:
+            entered = bool(pane_hwnd and bg.send_keys(
+                self._hwnd(), "{ENTER}", target_hwnd=pane_hwnd,
+                strict_target=True
+            ))
+            logger.info("发动机系统诊断: 定向 Enter x1")
+        else:
+            entered = bool(self.send_enter(timeout=min(15, timeout)))
+        if not entered:
             return False
         return self._wait_ready(timeout, **target) is not None
 

@@ -226,12 +226,13 @@ def set_text(hwnd: int, text: str) -> bool:
 
 
 def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,
-              target_hwnd: int = None) -> bool:
+              target_hwnd: int = None, strict_target: bool = False) -> bool:
     """向 DTS 窗口投递键盘输入（pywinauto 语法，如 '{DOWN 2}{ENTER}' / 文件名）。
 
     target_hwnd 指定目标控件时，在同一 AttachThreadInput 块内先 SetFocus 再
-    投递 —— 焦点与按键原子完成。即使外部（如 AutoDrive 前台守卫）随后抢走
-    前台，也不会打断本次投递；方向键/输入框等必须落在具体控件上的场景用它。
+    投递 —— 焦点与按键原子完成。strict_target=True 时，即使 SetFocus 失败也
+    直接把消息投递给该句柄，禁止回退到 DTS 当前焦点；适用于不接受键盘焦点的
+    自绘容器或逻辑窗格。
     """
     if not hwnd_top:
         return False
@@ -258,6 +259,8 @@ def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,
             target = user32.GetFocus()
             if not _dts_thread_has(target):
                 target = 0
+        if strict_target and target_hwnd and _dts_thread_has(target_hwnd):
+            target = target_hwnd
         if not target:
             # 在已 attach 的块内直接读焦点（不调 _get_focus，避免其内部 detach 打断原子性）
             target = user32.GetFocus()
