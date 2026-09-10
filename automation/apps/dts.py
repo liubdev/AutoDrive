@@ -46,8 +46,79 @@ class DtsApp(BaseApp):
         self.window_mode = getattr(settings, "dts_window_mode", "offscreen")
         self.start_minimized = getattr(settings, "dts_start_minimized", True)
         self.elevated = getattr(settings, "dts_elevated", False)
+        self._click_trace_no = 0
         # 上一次自动重连时刻（0=从未）；窗口自愈用
         self._last_reconnect_at = 0.0
+
+    # ── 点击诊断截图 ──────────────────────────────────
+
+    def _capture_click_snapshot(self, label: str, x: int, y: int, phase: str) -> None:
+        """截取点击前后画面并标记坐标；截图失败不能影响自动化。"""
+        try:
+            from PIL import Image, ImageDraw
+            from vision.screenshot import ScreenCapture
+
+            out_dir = Path(getattr(self, "run_output_dir", settings.reports_dir))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            safe_label = "".join(c if c.isalnum() else "_" for c in label)[:32]
+            output = (
+                out_dir / f"click_{self._click_trace_no:03d}_{safe_label}_{phase}.png"
+            )
+            ScreenCapture().fullscreen(str(output))
+            image = Image.open(output).convert("RGB")
+            draw = ImageDraw.Draw(image)
+            radius = 14
+            color = "#ff1f1f" if phase == "before" else "#00a63c"
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius), outline=color, width=4
+            )
+            draw.line((x - 26, y, x + 26, y), fill=color, width=3)
+            draw.line((x, y - 26, x, y + 26), fill=color, width=3)
+            text = f"{phase.upper()} {label} ({x},{y})"
+            tx, ty = x + 22, max(4, y - 34)
+            draw.rectangle(
+                (tx - 4, ty - 3, tx + 220, ty + 16),
+                fill="#ffffff",
+                outline=color,
+                width=2,
+            )
+            draw.text((tx, ty), text, fill=color)
+            image.save(output)
+            logger.info("点击截图[%s][%s]: %s", label, phase, output)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("点击截图[%s][%s]失败: %s", label, phase, exc)
+
+    def _click_with_trace(self, label: str, x: int, y: int, action) -> bool:
+        self._click_trace_no += 1
+        trace_no = self._click_trace_no
+        self._capture_click_snapshot(label, x, y, "before")
+        try:
+            return bool(action())
+        finally:
+            time.sleep(0.35)
+            self._capture_click_snapshot(label, x, y, "after")
+
+    def click_at(self, x: int, y: int) -> bool:
+        """坐标点击统一记录点击前后截图。"""
+        return self._click_with_trace(
+            "coordinate", x, y, lambda: BaseApp.click_at(self, x, y)
+        )
+
+    def click_ctrl(self, ctrl) -> bool:
+        """控件点击统一记录控件中心的点击前后截图。"""
+        try:
+            rect = ctrl.rectangle()
+            x = rect.left + rect.width() // 2
+            y = rect.top + rect.height() // 2
+        except Exception:
+            return super().click_ctrl(ctrl)
+        label = (
+            getattr(getattr(ctrl, "element_info", None), "automation_id", "")
+            or "control"
+        )
+        return self._click_with_trace(
+            f"control_{label}", x, y, lambda: BaseApp.click_ctrl(self, ctrl)
+        )
 
     # ── 窗口连接自愈 ──────────────────────────────────
 
@@ -61,12 +132,12 @@ class DtsApp(BaseApp):
         try:
             if "element_info" not in dir(win) and "handle" not in dir(win):
                 return False
-        except Exception:      # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return True
         try:
             _ = win.handle
             return False
-        except Exception:      # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return True
 
     @property
@@ -79,8 +150,12 @@ class DtsApp(BaseApp):
         失效即调 _reconnect_main 重建连接，用冷却时间避免同一失效期内的重连风暴。
         """
         win = super().window
-        if (win is not None and self.background and self._window_stale(win)
-                and time.time() - self._last_reconnect_at >= self._RECONNECT_COOLDOWN):
+        if (
+            win is not None
+            and self.background
+            and self._window_stale(win)
+            and time.time() - self._last_reconnect_at >= self._RECONNECT_COOLDOWN
+        ):
             self._last_reconnect_at = time.time()
             logger.warning("窗口连接失效（UIA 句柄失效），自动重连 DTS 主窗口…")
             self._reconnect_main(timeout=8)
@@ -131,11 +206,13 @@ class DtsApp(BaseApp):
 
     def _home_anchor(self):
         # 翻页按钮在只有一页时可能禁用，仍可用作定位锚点。
-        ctrl = self._ready_control(require_enabled=False, auto_id="1013",
-                                   control_type="Button")
+        ctrl = self._ready_control(
+            require_enabled=False, auto_id="1013", control_type="Button"
+        )
         if ctrl is None:
-            ctrl = self._ready_control(require_enabled=False, title="上翻页",
-                                       control_type="Button")
+            ctrl = self._ready_control(
+                require_enabled=False, title="上翻页", control_type="Button"
+            )
         return ctrl
 
     def _probe_startup(self):
@@ -154,7 +231,9 @@ class DtsApp(BaseApp):
                     continue
                 if not self._connect_by_handle(w.handle, w.process_id):
                     continue
-                btn = self._ready_control(auto_id="1", title="确认", control_type="Button")
+                btn = self._ready_control(
+                    auto_id="1", title="确认", control_type="Button"
+                )
                 if btn is not None:
                     self._apply_window_hiding()
                     return "confirm", btn
@@ -180,7 +259,11 @@ class DtsApp(BaseApp):
         while time.monotonic() < deadline:
             state, btn = self._probe_startup()
             if state == "home":
-                logger.info("确认完成，主页已就绪" if clicked else "无启动确认弹窗，主页已就绪，跳过确认")
+                logger.info(
+                    "确认完成，主页已就绪"
+                    if clicked
+                    else "无启动确认弹窗，主页已就绪，跳过确认"
+                )
                 return True
             if state == "confirm" and not clicked:
                 if not self.click_ctrl(btn):
@@ -197,13 +280,20 @@ class DtsApp(BaseApp):
         """
         if not self._reconnect_main(timeout):
             return False
-        if self._wait_ready(timeout, require_enabled=False, auto_id="1013", control_type="Button") is None:
+        if (
+            self._wait_ready(
+                timeout, require_enabled=False, auto_id="1013", control_type="Button"
+            )
+            is None
+        ):
             return False
         logger.info("一键进入: 执行左上入口点击")
         if not self._click_image_btn(rx=0.573, ry=0.178, settle=0):
             return False
-        return self._wait_ready(timeout, title="当前设置:车下使用",
-                                control_type="Text") is not None
+        return (
+            self._wait_ready(timeout, title="当前设置:车下使用", control_type="Text")
+            is not None
+        )
 
     def enter_system(self, timeout: int = 30) -> bool:
         """在「一键进入」后的左上入口单击一次。
@@ -218,8 +308,10 @@ class DtsApp(BaseApp):
         logger.info("点击进入系统: 一键进入后等待 1.0s，再点击左上入口")
         time.sleep(1)
         anchor = self._wait_ready(
-            min(5, timeout), auto_id="1185", title="当前设置:车下使用",
-            control_type="Text"
+            min(5, timeout),
+            auto_id="1185",
+            title="当前设置:车下使用",
+            control_type="Text",
         )
         if anchor is None:
             logger.warning("点击进入系统: 未找到页面标题锚点")
@@ -228,14 +320,15 @@ class DtsApp(BaseApp):
         # Inspect 实测标题 (20,51)-(1900,89)，入口点 (280,154)。
         x = rect.left + round(rect.width() * 260 / 1880)
         y = rect.bottom + round(rect.height() * 65 / 38)
-        self._save_enter_system_click_screenshot(x, y)
-        if not bg.foreground_click_at(self._hwnd(), x, y):
+        clicked = self._click_with_trace(
+            "enter_system", x, y, lambda: bg.foreground_click_at(self._hwnd(), x, y)
+        )
+        if not clicked:
             logger.warning("点击进入系统: DTS 真实鼠标点击失败")
             return False
         logger.info("点击进入系统: 已完成真实鼠标点击 (%d,%d)，等待目标页面加载", x, y)
         target = self._wait_ready(
-            min(20, timeout), auto_id="1046", title="重启诊断",
-            control_type="Button"
+            min(20, timeout), auto_id="1046", title="重启诊断", control_type="Button"
         )
         if target is None:
             logger.error("点击进入系统: 目标页面未加载，禁止进入下一步操作")
@@ -243,47 +336,21 @@ class DtsApp(BaseApp):
         logger.info("点击进入系统: 目标页面已加载，重启诊断按钮出现")
         return True
 
-    def _save_enter_system_click_screenshot(self, x: int, y: int) -> None:
-        """保存 Step 4 点击前的屏幕截图，并标注实际消息投递坐标。"""
-        try:
-            from PIL import Image, ImageDraw
-            from vision.screenshot import ScreenCapture
-
-            out_dir = Path(getattr(self, "run_output_dir", settings.reports_dir))
-            out_dir.mkdir(parents=True, exist_ok=True)
-            output = out_dir / "step4_enter_system_click.png"
-            ScreenCapture().fullscreen(str(output))
-
-            image = Image.open(output).convert("RGB")
-            draw = ImageDraw.Draw(image)
-            radius = 14
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius),
-                         outline="#ff1f1f", width=4)
-            draw.line((x - 26, y, x + 26, y), fill="#ff1f1f", width=3)
-            draw.line((x, y - 26, x, y + 26), fill="#ff1f1f", width=3)
-            label = f"CLICK ({x}, {y})"
-            label_x, label_y = x + 22, max(4, y - 34)
-            draw.rectangle((label_x - 4, label_y - 3, label_x + 122, label_y + 16),
-                           fill="#ffffff", outline="#ff1f1f", width=2)
-            draw.text((label_x, label_y), label, fill="#cc0000")
-            image.save(output)
-            logger.info("点击进入系统: 已保存点击标注截图: %s", output)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("点击进入系统: 保存点击标注截图失败: %s", exc)
-
     def diagnose_engine_system(self, timeout: int = 30) -> bool:
         target = dict(auto_id="1058", title="直接进入", control_type="Button")
         if self._ready_control(**target) is not None:
             return True
-        pane = self._wait_ready(timeout, auto_id="1033", class_name="AfxWnd80su",
-                                control_type="Pane")
+        pane = self._wait_ready(
+            timeout, auto_id="1033", class_name="AfxWnd80su", control_type="Pane"
+        )
         if pane is None:
             return False
         # Inspect: 窗格 (20,108)-(1903,937)，第一项 (195,130)。
         # 只点击一次；识别通讯期间持续检测弹窗，避免排队点击落入下一页。
         r = pane.rectangle()
-        if not self.click_at(r.left + round(r.width() * 175 / 1883),
-                             r.top + round(r.height() * 22 / 829)):
+        if not self.click_at(
+            r.left + round(r.width() * 175 / 1883), r.top + round(r.height() * 22 / 829)
+        ):
             return False
         time.sleep(0.5)
         # 坐标点击只负责选中诊断项；DTS 还需要列表窗格上的 Enter 才会进入扫描。
@@ -293,12 +360,16 @@ class DtsApp(BaseApp):
         except Exception:
             pane_hwnd = 0
         logger.info("发动机系统诊断: 已选中诊断项，Enter 目标窗格=0x%X", pane_hwnd)
+        if not pane_hwnd:
+            logger.error("发动机系统诊断: 诊断窗格没有原生句柄，无法定向发送 Enter")
+            return False
         if self.background:
-            entered = bool(pane_hwnd and bg.send_keys(
-                self._hwnd(), "{ENTER}", target_hwnd=pane_hwnd,
-                strict_target=True
-            ))
-            logger.info("发动机系统诊断: 定向 Enter x1")
+            entered = bool(
+                bg.send_keys(
+                    self._hwnd(), "{ENTER}", target_hwnd=pane_hwnd, strict_target=True
+                )
+            )
+            logger.info("发动机系统诊断: 定向 Enter x1 (发送=%s)", entered)
         else:
             entered = bool(self.send_enter(timeout=min(15, timeout)))
         if not entered:
@@ -306,15 +377,22 @@ class DtsApp(BaseApp):
         return self._wait_ready(timeout, **target) is not None
 
     def direct_enter(self, timeout: int = 20) -> bool:
-        btn = self._wait_ready(timeout, auto_id="1058", title="直接进入",
-                               control_type="Button")
+        btn = self._wait_ready(
+            timeout, auto_id="1058", title="直接进入", control_type="Button"
+        )
         if btn is None or not self.click_ctrl(btn):
             return False
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             # 主页面旧控件可能仍在树中，先确认模态按钮已经消失。
-            if (self._ready_control(auto_id="1058", title="直接进入", control_type="Button") is None
-                    and self._ready_control(auto_id="1046", control_type="Button") is not None):
+            if (
+                self._ready_control(
+                    auto_id="1058", title="直接进入", control_type="Button"
+                )
+                is None
+                and self._ready_control(auto_id="1046", control_type="Button")
+                is not None
+            ):
                 return True
             time.sleep(0.2)
         logger.error("直接进入后页面未就绪")
@@ -431,21 +509,36 @@ class DtsApp(BaseApp):
         logger.info("════ UI 状态快照: %s ════", tag)
         try:
             fg = bg.active_window()
-            logger.info("前台窗口 0x%X pid=%s 类=%s 标题=%r",
-                        fg, bg.window_pid(fg), bg.window_class(fg), bg.window_title(fg)[:60])
+            logger.info(
+                "前台窗口 0x%X pid=%s 类=%s 标题=%r",
+                fg,
+                bg.window_pid(fg),
+                bg.window_class(fg),
+                bg.window_title(fg)[:60],
+            )
             hwnd = self._hwnd()
-            logger.info("DTS 主窗口 0x%X 类=%s 标题=%r",
-                        hwnd, bg.window_class(hwnd), bg.window_title(hwnd)[:60])
+            logger.info(
+                "DTS 主窗口 0x%X 类=%s 标题=%r",
+                hwnd,
+                bg.window_class(hwnd),
+                bg.window_title(hwnd)[:60],
+            )
             focus = bg._get_focus(hwnd)
-            logger.info("键盘焦点 0x%X 类=%s 标题=%r  （类==主窗口类 → 无子控件持焦点，DOWN/ENTER 会落到窗框上）",
-                        focus, bg.window_class(focus), bg.window_title(focus)[:60])
+            logger.info(
+                "键盘焦点 0x%X 类=%s 标题=%r  （类==主窗口类 → 无子控件持焦点，DOWN/ENTER 会落到窗框上）",
+                focus,
+                bg.window_class(focus),
+                bg.window_title(focus)[:60],
+            )
             self._dump_window_tree(hwnd)
             self._dump_list_pane()
         except Exception as e:  # noqa: BLE001
             logger.warning("UI 状态快照异常: %s", e)
         logger.info("════ 状态快照结束 ════")
 
-    def _dump_window_tree(self, hwnd: int, max_depth: int = 4, max_nodes: int = 80) -> None:
+    def _dump_window_tree(
+        self, hwnd: int, max_depth: int = 4, max_nodes: int = 80
+    ) -> None:
         """浅层 UIA 树 dump：看当前停在哪个界面、有没有列表/菜单控件。"""
         if not hwnd:
             logger.info("  （未连接主窗口，跳过 UIA 树）")
@@ -469,9 +562,19 @@ class DtsApp(BaseApp):
                 cls = getattr(info, "class_name", "") or ""
                 name = (ctrl.window_text() or "").strip()[:30]
                 r = ctrl.rectangle()
-                geo = f"({r.left},{r.top} {r.width()}x{r.height()})" if r.width() else ""
-                logger.info("  %s%s type=%s auto_id=%r class=%s %s 名称=%r",
-                            "  " * depth, depth, ct, aid, cls, geo, name)
+                geo = (
+                    f"({r.left},{r.top} {r.width()}x{r.height()})" if r.width() else ""
+                )
+                logger.info(
+                    "  %s%s type=%s auto_id=%r class=%s %s 名称=%r",
+                    "  " * depth,
+                    depth,
+                    ct,
+                    aid,
+                    cls,
+                    geo,
+                    name,
+                )
                 nodes[0] += 1
             except Exception:
                 pass
@@ -500,7 +603,9 @@ class DtsApp(BaseApp):
                 auto_id="1131", control_type="Pane", found_index=0
             )
             if not pane.exists(timeout=1):
-                logger.info("  列表窗格 auto_id=1131 不存在 —— 当前界面没有可读列表（可能不在数据流菜单）")
+                logger.info(
+                    "  列表窗格 auto_id=1131 不存在 —— 当前界面没有可读列表（可能不在数据流菜单）"
+                )
                 return
             r = pane.rectangle()
             kids = pane.children()
@@ -512,8 +617,16 @@ class DtsApp(BaseApp):
                 except Exception:
                     pass
             li = pane.descendants(control_type="ListItem")
-            logger.info("  列表窗格 1131: %sx%s @(%s,%s) 直接子控件 %d 个 类型=%s ListItem=%d 个",
-                        r.width(), r.height(), r.left, r.top, len(kids), types or "{}", len(li))
+            logger.info(
+                "  列表窗格 1131: %sx%s @(%s,%s) 直接子控件 %d 个 类型=%s ListItem=%d 个",
+                r.width(),
+                r.height(),
+                r.left,
+                r.top,
+                len(kids),
+                types or "{}",
+                len(li),
+            )
         except Exception as e:  # noqa: BLE001
             logger.warning("  列表窗格诊断失败: %s", e)
 
@@ -591,7 +704,7 @@ class DtsApp(BaseApp):
             edit = root.child_window(control_type="Edit", found_index=0)
             if edit.exists(timeout=0.5):
                 r = edit.rectangle()
-                if r.width() > 0 and r.height() > 0:   # 可见
+                if r.width() > 0 and r.height() > 0:  # 可见
                     if self.set_focus_bg(edit):
                         time.sleep(0.3)
                         logger.info("已聚焦文件名输入框")
@@ -627,9 +740,13 @@ class DtsApp(BaseApp):
         一律改用前台窗口判断：谁在前台，谁就是当前要处理的弹窗。
         """
         fg = bg.active_window()
-        if (fg and fg != self._hwnd() and self.pid
-                and bg.window_pid(fg) == self.pid
-                and bg.window_class(fg) == "#32770"):
+        if (
+            fg
+            and fg != self._hwnd()
+            and self.pid
+            and bg.window_pid(fg) == self.pid
+            and bg.window_class(fg) == "#32770"
+        ):
             return fg
         return 0
 
@@ -648,10 +765,12 @@ class DtsApp(BaseApp):
             for w in find_elements(backend="uia", top_level_only=True):
                 try:
                     hwnd = int(w.handle)
-                    if (hwnd not in exclude
-                            and self.pid
-                            and w.process_id == self.pid
-                            and w.class_name == "#32770"):
+                    if (
+                        hwnd not in exclude
+                        and self.pid
+                        and w.process_id == self.pid
+                        and w.class_name == "#32770"
+                    ):
                         return hwnd
                 except Exception:
                     continue
@@ -676,8 +795,9 @@ class DtsApp(BaseApp):
             if hwnd:
                 return hwnd
             time.sleep(0.25)
-        logger.warning("DTS 文件对话框未在 %.1fs 内出现，标题关键字=%s",
-                       wait, title_keywords)
+        logger.warning(
+            "DTS 文件对话框未在 %.1fs 内出现，标题关键字=%s", wait, title_keywords
+        )
         return 0
 
     def _title_matches(self, titles: list, title_keywords) -> bool:
@@ -692,8 +812,12 @@ class DtsApp(BaseApp):
                 hwnd = int(w.handle)
                 titles = self._dialog_titles(hwnd, w)
                 if self._title_matches(titles, title_keywords):
-                    logger.info("检测到顶层 DTS 文件对话框 0x%X pid=%s title=%r",
-                                hwnd, w.process_id, titles)
+                    logger.info(
+                        "检测到顶层 DTS 文件对话框 0x%X pid=%s title=%r",
+                        hwnd,
+                        w.process_id,
+                        titles,
+                    )
                     return hwnd
             except Exception:
                 continue
@@ -718,8 +842,7 @@ class DtsApp(BaseApp):
                     continue
                 dlg = self._ancestor_dialog_handle(titlebar)
                 if dlg:
-                    logger.info("检测到嵌套 DTS 文件对话框 0x%X title=%r",
-                                dlg, titles)
+                    logger.info("检测到嵌套 DTS 文件对话框 0x%X title=%r", dlg, titles)
                     return dlg
             except Exception:
                 continue
@@ -804,7 +927,9 @@ class DtsApp(BaseApp):
 
             root = Desktop(backend="uia").window(handle=hwnd)
             for title in titles:
-                btn = root.child_window(title=title, control_type="Button", found_index=0)
+                btn = root.child_window(
+                    title=title, control_type="Button", found_index=0
+                )
                 if btn.exists(timeout=0.3):
                     return btn
                 # 兼容文件对话框的 UIA_SplitButtonControlTypeId（如「打开(O)」）。
@@ -843,8 +968,9 @@ class DtsApp(BaseApp):
             time.sleep(0.3)
         return False
 
-    def confirm_enter_if_dialog(self, wait: float = 2.5, max_times: int = 3,
-                                exclude=None) -> bool:
+    def confirm_enter_if_dialog(
+        self, wait: float = 2.5, max_times: int = 3, exclude=None
+    ) -> bool:
         """文件对话框提交后：若又出现 DTS #32770 弹窗（覆盖/确认）则确认。
 
         旧代码在主窗口 self.window 里搜按钮 title="是(Y)" —— 覆盖确认是独立顶层
@@ -859,16 +985,23 @@ class DtsApp(BaseApp):
             if not dlg:
                 break
             handled = True
-            logger.info("检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 确认",
-                        dlg, bg.window_class(dlg), bg.window_title(dlg))
-            if not self._click_dialog_button(dlg, ["是(Y)", "是", "确定"], "确认/覆盖弹窗"):
+            logger.info(
+                "检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 确认",
+                dlg,
+                bg.window_class(dlg),
+                bg.window_title(dlg),
+            )
+            if not self._click_dialog_button(
+                dlg, ["是(Y)", "是", "确定"], "确认/覆盖弹窗"
+            ):
                 bg.send_keys(dlg, "{ENTER}")
             self._wait_dialog_gone(dlg, wait=4)
             exclude.add(dlg)
         return handled
 
-    def drive_file_dialog(self, file_name: str, mode: str = "save",
-                          timeout: float = 12) -> bool:
+    def drive_file_dialog(
+        self, file_name: str, mode: str = "save", timeout: float = 12
+    ) -> bool:
         """驱动「保存列表/载入列表」文件对话框（点击按钮打开弹窗后调用）。
 
         全程只作用于 DTS 文件对话框，不再切焦点到主窗口或强找 Edit：
@@ -1025,8 +1158,9 @@ class DtsApp(BaseApp):
     #  自绘按钮定位（跨分辨率，相对比例）
     # ═══════════════════════════════════════════════
 
-    def _control_exists(self, auto_id: str, control_type: str = "Button",
-                        timeout: float = 1) -> bool:
+    def _control_exists(
+        self, auto_id: str, control_type: str = "Button", timeout: float = 1
+    ) -> bool:
         try:
             ctrl = self.window.child_window(
                 auto_id=auto_id, control_type=control_type, found_index=0
@@ -1035,32 +1169,42 @@ class DtsApp(BaseApp):
         except Exception:
             return False
 
-    def _click_until_control(self, name: str, click, verify_auto_id: str,
-                             verify_control_type: str = "Button",
-                             attempts: int = 3,
-                             verify_timeout: float = 5) -> bool:
+    def _click_until_control(
+        self,
+        name: str,
+        click,
+        verify_auto_id: str,
+        verify_control_type: str = "Button",
+        attempts: int = 3,
+        verify_timeout: float = 5,
+    ) -> bool:
         """点击自绘区域后用目标控件验证页面跳转，未跳转则重连并重试。"""
         if self._control_exists(verify_auto_id, verify_control_type, timeout=0.5):
             logger.info("%s: 目标控件 %s 已存在，跳过点击", name, verify_auto_id)
             return True
         for i in range(attempts):
             if i > 0:
-                logger.warning("%s: 点击后未进入目标页面，重连后重试 %d/%d",
-                               name, i + 1, attempts)
+                logger.warning(
+                    "%s: 点击后未进入目标页面，重连后重试 %d/%d", name, i + 1, attempts
+                )
                 self._reconnect_main(timeout=5)
             if not click():
                 continue
             if self._control_exists(
-                    verify_auto_id, verify_control_type, timeout=verify_timeout):
+                verify_auto_id, verify_control_type, timeout=verify_timeout
+            ):
                 logger.info("%s: 点击生效，目标控件 %s 已出现", name, verify_auto_id)
                 return True
-        logger.warning("%s: 连续 %d 次点击后目标控件 %s 仍未出现",
-                       name, attempts, verify_auto_id)
+        logger.warning(
+            "%s: 连续 %d 次点击后目标控件 %s 仍未出现", name, attempts, verify_auto_id
+        )
         return False
 
     # ── 文本锚点 ──────────────────────────────────
 
-    def _click_below_text(self, auto_id: str, rx: float, ry: float, settle: float = 2) -> bool:
+    def _click_below_text(
+        self, auto_id: str, rx: float, ry: float, settle: float = 2
+    ) -> bool:
         """
         以文本控件为锚点，按比例偏移点击
 
@@ -1144,7 +1288,11 @@ class DtsApp(BaseApp):
                     continue
             for w in wins:
                 try:
-                    if w.process_id == self.pid and w.class_name == "#32770" and "DTS" in (w.name or ""):
+                    if (
+                        w.process_id == self.pid
+                        and w.class_name == "#32770"
+                        and "DTS" in (w.name or "")
+                    ):
                         if not self._connect_by_handle(w.handle, w.process_id):
                             continue
                         self._apply_window_hiding()
@@ -1160,8 +1308,11 @@ class DtsApp(BaseApp):
                     if not self._connect_by_handle(w.handle, w.process_id):
                         continue
                     self._apply_window_hiding()
-                    logger.info("已连接 DTS 进程窗口 (hwnd=%s, class=%s)",
-                                w.handle, w.class_name)
+                    logger.info(
+                        "已连接 DTS 进程窗口 (hwnd=%s, class=%s)",
+                        w.handle,
+                        w.class_name,
+                    )
                     return True
                 except Exception:
                     continue
@@ -1176,12 +1327,17 @@ class DtsApp(BaseApp):
             logger.warning(
                 "DTS 主窗口未在 %ds 内出现；期间见过的顶层窗口: %s；"
                 "（DTS 进程仍在运行 PID=%s → 是窗口/类名匹配问题，进程没死）",
-                timeout, sorted(seen)[:20] or "（无）", pid)
+                timeout,
+                sorted(seen)[:20] or "（无）",
+                pid,
+            )
         else:
             logger.warning(
                 "DTS 主窗口未在 %ds 内出现；期间见过的顶层窗口: %s；"
                 "（DTS 进程已退出 —— 自动化不杀进程，疑似导航误触或 DTS 自身退出）",
-                timeout, sorted(seen)[:20] or "（无）")
+                timeout,
+                sorted(seen)[:20] or "（无）",
+            )
         return False
 
     def _wait_for_dts_window(self, timeout: int = 30):
@@ -1198,6 +1354,7 @@ class DtsApp(BaseApp):
 
     def restart_for_diagnosis(self, timeout: int = 30) -> bool:
         from automation.processes import stop_executable
+
         stop_executable(self.APP_EXE, timeout=10)
         self.disconnect()
         self._last_reconnect_at = 0.0
