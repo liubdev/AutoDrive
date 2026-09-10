@@ -95,7 +95,7 @@ class DtsApp(BaseApp):
         try:
             return bool(action())
         finally:
-            time.sleep(0.35)
+            time.sleep(1.2)
             self._capture_click_snapshot(label, x, y, "after")
 
     def click_at(self, x: int, y: int) -> bool:
@@ -345,31 +345,12 @@ class DtsApp(BaseApp):
         )
         if pane is None:
             return False
-        # Inspect: 窗格 (20,108)-(1903,937)，第一项 (195,130)。
-        # 只点击一次；识别通讯期间持续检测弹窗，避免排队点击落入下一页。
-        r = pane.rectangle()
-        if not self.click_at(
-            r.left + round(r.width() * 175 / 1883), r.top + round(r.height() * 22 / 829)
-        ):
-            return False
-        time.sleep(0.5)
-        # 坐标点击只负责选中诊断项；DTS 还需要列表窗格上的 Enter 才会进入扫描。
-        # 该 AfxWnd80su 窗格可能不可 SetFocus，必须禁止按键回退到旧焦点。
-        try:
-            pane_hwnd = int(pane.handle)
-        except Exception:
-            pane_hwnd = 0
-        logger.info("发动机系统诊断: 已选中诊断项，Enter 目标窗格=0x%X", pane_hwnd)
-        if not pane_hwnd:
-            logger.error("发动机系统诊断: 诊断窗格没有原生句柄，无法定向发送 Enter")
-            return False
+        # 进入系统后 DTS 默认已选中发动机系统诊断，不再重复点击列表项。
+        # 该自绘列表没有可靠原生句柄，改为临时激活 DTS 后发送一次真实 Enter。
+        logger.info("发动机系统诊断: 检测到默认选中项，不重复点击列表")
         if self.background:
-            entered = bool(
-                bg.send_keys(
-                    self._hwnd(), "{ENTER}", target_hwnd=pane_hwnd, strict_target=True
-                )
-            )
-            logger.info("发动机系统诊断: 定向 Enter x1 (发送=%s)", entered)
+            entered = bool(bg.foreground_press_enter(self._hwnd()))
+            logger.info("发动机系统诊断: 真实 Enter x1 (发送=%s)", entered)
         else:
             entered = bool(self.send_enter(timeout=min(15, timeout)))
         if not entered:

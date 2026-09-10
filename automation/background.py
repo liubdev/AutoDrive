@@ -401,6 +401,27 @@ def foreground_click_at(hwnd: int, sx: int, sy: int) -> bool:
         set_topmost(hwnd, False)
 
 
+def foreground_press_enter(hwnd: int) -> bool:
+    """临时激活 DTS 后发送一次真实 Enter，再恢复普通层级。"""
+    if not hwnd:
+        return False
+    try:
+        set_topmost(hwnd, True)
+        if not force_foreground(hwnd):
+            logger.warning("真实 Enter: DTS 无法切换到前台 0x%X", hwnd)
+            return False
+        time.sleep(0.2)
+        user32.keybd_event(0x0D, 0, 0, 0)
+        user32.keybd_event(0x0D, 0, 2, 0)
+        logger.info("真实 Enter → DTS 0x%X", hwnd)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("真实 Enter 发送失败: %s", exc)
+        return False
+    finally:
+        set_topmost(hwnd, False)
+
+
 def _ctrl_hwnd(ctrl) -> int:
     """取 pywinauto 控件的真实窗口句柄（wrapper.handle，降级 element_info.handle）"""
     try:
