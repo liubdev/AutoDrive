@@ -53,8 +53,9 @@ def _attach_run_log(out_dir: Path):
     close_run_log()
     if out_dir is None:
         return
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s",
-                            datefmt="%H:%M:%S")
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%H:%M:%S"
+    )
     fh = logging.FileHandler(out_dir / f"{out_dir.name}.log", encoding="utf-8")
     fh.setFormatter(fmt)
     root = logging.getLogger()
@@ -80,6 +81,7 @@ def _desktop_dir() -> Path:
     """鲁棒解析用户桌面路径（DTS 保存数据流列表的默认目录，支持 OneDrive 重定向）"""
     try:
         import ctypes
+
         buf = ctypes.create_unicode_buffer(512)
         # CSIDL_DESKTOPDIRECTORY = 0x0010
         if ctypes.windll.shell32.SHGetFolderPathW(None, 0x0010, None, 0, buf) == 0:
@@ -149,57 +151,69 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
     steps = []
 
     # 每次完整采集先清理旧实例，从启动确认页重新执行。
-    steps.append(FlowStep("启动 DTS", action=lambda: app.restart_for_diagnosis(timeout=30)))
-    # 动作内部负责页面就绪验证，避免重复等待旧版控件或重放已成功的点击。
-    steps.append(FlowStep("确认", action=lambda: app.confirm(timeout=20)))
-    steps.append(FlowStep("一键进入", action=lambda: app.one_click_enter(timeout=20)))
+    steps.append(FlowStep("启动 DTS", action=lambda: app.restart_for_diagnosis()))
+    steps.append(FlowStep("确认", action=lambda: app.confirm()))
+    steps.append(FlowStep("一键进入", action=lambda: app.one_click_enter(timeout=30)))
     steps.append(FlowStep("点击进入系统", action=lambda: app.enter_system(timeout=30)))
-    steps.append(FlowStep("发动机系统诊断",
-                          action=lambda: app.diagnose_engine_system(timeout=30)))
-    steps.append(FlowStep("直接进入", action=lambda: app.direct_enter(timeout=20)))
+    steps.append(
+        FlowStep(
+            "发动机系统诊断", action=lambda: app.diagnose_engine_system(timeout=30)
+        )
+    )
+    steps.append(FlowStep("直接进入", action=lambda: app.direct_enter(timeout=30)))
 
     # ── 第7步: 发动机2.0T ──
-    steps.append(FlowStep("发动机2.0T",
-                          action=lambda: app.send_enter(),
-                          verify={"auto_id": "1058"}, timeout=20,
-                          continue_on_missing=False))
+    steps.append(
+        FlowStep(
+            "发动机2.0T",
+            action=lambda: app.send_enter(),
+            verify={"auto_id": "1058"},
+            timeout=20,
+            continue_on_missing=False,
+        )
+    )
 
     # ── 第8步: 空格 + 版本信息 ──
-    steps.append(FlowStep("空格确认",
-                          action=lambda: app.send_space(timeout=15),
-                          verify={"auto_id": "1202", "control_type": "Edit"},
-                          timeout=20,
-                          continue_on_missing=False))
+    steps.append(
+        FlowStep(
+            "空格确认",
+            action=lambda: app.send_space(timeout=15),
+            verify={"auto_id": "1202", "control_type": "Edit"},
+            timeout=20,
+            continue_on_missing=False,
+        )
+    )
 
     # ── 第9步: 保存版本信息 ──
-    steps.append(FlowStep("保存版本信息",
-                          action=_make_save_version(app, out_dir)))
+    steps.append(FlowStep("保存版本信息", action=_make_save_version(app, out_dir)))
 
     # ── 第10步: 空格确认 ──
-    steps.append(FlowStep("空格确认",
-                          action=lambda: app.send_space(timeout=15)))
+    steps.append(FlowStep("空格确认", action=lambda: app.send_space(timeout=15)))
 
     # ── 第11步: 进入故障码选项 ──
-    steps.append(FlowStep("进入故障码选项",
-                          action=lambda: bool(app.send_keys("{ENTER}"))))
+    steps.append(
+        FlowStep("进入故障码选项", action=lambda: bool(app.send_keys("{ENTER}")))
+    )
 
     # ── 第12步: 获取故障码 ──
-    steps.append(FlowStep("获取故障码",
-                          action=_make_copy_fault_codes(app, out_dir),
-                          timeout=180))
+    steps.append(
+        FlowStep("获取故障码", action=_make_copy_fault_codes(app, out_dir), timeout=180)
+    )
 
     # ── 第13步: 返回 ──
-    steps.append(FlowStep("返回",
-                          action=_make_go_back(app)))
+    steps.append(FlowStep("返回", action=_make_go_back(app)))
 
     # ── 第14步: 导航到数据流菜单 ──
-    steps.append(FlowStep("导航到数据流菜单",
-                          action=_make_nav_data_flow(app)))
+    steps.append(FlowStep("导航到数据流菜单", action=_make_nav_data_flow(app)))
 
     # ── 第15步: 循环读取数据流 ──
-    steps.append(FlowStep("循环读取数据流",
-                          action=_make_data_flow_loop(app, out_dir, max_flows),
-                          timeout=1200))
+    steps.append(
+        FlowStep(
+            "循环读取数据流",
+            action=_make_data_flow_loop(app, out_dir, max_flows),
+            timeout=1200,
+        )
+    )
 
     return steps
 
@@ -207,6 +221,7 @@ def build_dts_flow(app: DtsApp, out_dir: Path, max_flows: int = 5) -> list:
 # ═══════════════════════════════════════════════════════════
 #  步骤动作（闭包工厂）
 # ═══════════════════════════════════════════════════════════
+
 
 def _make_save_version(app: DtsApp, out_dir: Path):
     def action():
@@ -219,6 +234,7 @@ def _make_save_version(app: DtsApp, out_dir: Path):
             return True
         log.warning("版本信息保存失败")
         return False
+
     return action
 
 
@@ -233,6 +249,7 @@ def _make_copy_fault_codes(app: DtsApp, out_dir: Path):
         else:
             log.warning("未获取到故障码")
         return True
+
     return action
 
 
@@ -247,6 +264,7 @@ def _make_go_back(app: DtsApp):
             return True
         log.warning("返回按钮(auto_id=2)不存在")
         return False
+
     return action
 
 
@@ -258,12 +276,14 @@ def _make_nav_data_flow(app: DtsApp):
         time.sleep(0.5)
         app.send_keys("{ENTER}")
         return True
+
     return action
 
 
 def _make_data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int):
     def action():
         return _data_flow_loop(app, out_dir, max_flows)
+
     return action
 
 

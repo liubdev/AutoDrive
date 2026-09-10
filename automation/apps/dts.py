@@ -174,7 +174,7 @@ class DtsApp(BaseApp):
                 continue
         return None, None
 
-    def confirm(self, timeout: int = 30) -> bool:
+    def confirm(self, timeout: int = 3) -> bool:
         deadline = time.monotonic() + timeout
         clicked = False
         while time.monotonic() < deadline:
@@ -232,7 +232,15 @@ class DtsApp(BaseApp):
         if not bg.foreground_click_at(self._hwnd(), x, y):
             logger.warning("点击进入系统: DTS 真实鼠标点击失败")
             return False
-        logger.info("点击进入系统: 已完成真实鼠标点击 (%d,%d)，交由下一步等待加载", x, y)
+        logger.info("点击进入系统: 已完成真实鼠标点击 (%d,%d)，等待目标页面加载", x, y)
+        target = self._wait_ready(
+            min(20, timeout), auto_id="1046", title="重启诊断",
+            control_type="Button"
+        )
+        if target is None:
+            logger.error("点击进入系统: 目标页面未加载，禁止进入下一步操作")
+            return False
+        logger.info("点击进入系统: 目标页面已加载，重启诊断按钮出现")
         return True
 
     def _save_enter_system_click_screenshot(self, x: int, y: int) -> None:
