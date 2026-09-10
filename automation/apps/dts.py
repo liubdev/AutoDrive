@@ -191,13 +191,15 @@ class DtsApp(BaseApp):
         return False
 
     def one_click_enter(self, timeout: int = 30) -> bool:
-        # 保留现有相对锚点；截图中的容器不是可 Invoke 的按钮。
+        """执行一次「一键进入」并等待「当前设置:车下使用」页面出现。
+
+        每次流程都从确认页开始，不能因为旧页面残留标题文本就跳过这次点击。
+        """
         if not self._reconnect_main(timeout):
             return False
-        if self._ready_control(title="当前设置:车下使用", control_type="Text") is not None:
-            return True
         if self._wait_ready(timeout, require_enabled=False, auto_id="1013", control_type="Button") is None:
             return False
+        logger.info("一键进入: 执行左上入口点击")
         if not self._click_image_btn(rx=0.573, ry=0.178, settle=0):
             return False
         return self._wait_ready(timeout, title="当前设置:车下使用",
