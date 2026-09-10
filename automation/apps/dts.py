@@ -345,9 +345,18 @@ class DtsApp(BaseApp):
         )
         if pane is None:
             return False
-        # 进入系统后 DTS 默认已选中发动机系统诊断，不再重复点击列表项。
-        # 该自绘列表没有可靠原生句柄，改为临时激活 DTS 后发送一次真实 Enter。
-        logger.info("发动机系统诊断: 检测到默认选中项，不重复点击列表")
+        # 默认选中项不代表键盘焦点已落在自绘列表上，先用真实鼠标点击建立焦点。
+        r = pane.rectangle()
+        x = r.left + round(r.width() * 175 / 1883)
+        y = r.top + round(r.height() * 22 / 829)
+        logger.info("发动机系统诊断: 默认选中项，先点击列表项建立焦点 (%d,%d)", x, y)
+        if not self._click_with_trace(
+            "engine_diagnosis_item", x, y,
+            lambda: bg.foreground_click_at(self._hwnd(), x, y),
+        ):
+            logger.error("发动机系统诊断: 列表项真实鼠标点击失败")
+            return False
+        time.sleep(0.5)
         if self.background:
             entered = bool(bg.foreground_press_enter(self._hwnd()))
             logger.info("发动机系统诊断: 真实 Enter x1 (发送=%s)", entered)
