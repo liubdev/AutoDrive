@@ -1,6 +1,10 @@
 """系统设置页：SETTINGS 11 项渲染；主题切换真实生效，其余演示。"""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSettings, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QComboBox
+import platform
+from pathlib import Path
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout
 
 from ui.lcsdata import SETTINGS
@@ -19,6 +23,7 @@ class SettingsPage(LcsPage):
         super().__init__(parent)
         self._theme = "dark"
         self._theme_btns = []
+        self._prefs = QSettings("AutoDrive", "AutoDrive")
         self._build_ui()
 
     def _build_ui(self):
@@ -39,7 +44,8 @@ class SettingsPage(LcsPage):
         name = QLabel(item["n"])
         name.setObjectName("setName")
         v.addWidget(name)
-        desc = QLabel(item["d"])
+        desc = QLabel("显示偏好；单位换算尚未接入，诊断数据保留原始单位" if item["n"] == "单位制" else item["d"])
+        desc.setWordWrap(True)
         desc.setObjectName("setDesc")
         v.addWidget(desc)
         h.addLayout(v, 1)
@@ -49,6 +55,22 @@ class SettingsPage(LcsPage):
 
     def _control(self, item):
         typ = item["type"]
+        name = item["n"]
+        system_pages = {"电源管理": "powersleep", "屏幕亮度": "display", "系统音量": "sound"}
+        if name in system_pages:
+            b = QPushButton("打开 Windows 设置")
+            b.setObjectName("setVal")
+            b.clicked.connect(lambda: self._open_system(system_pages[name]))
+            return b
+        if name in ("字体大小", "单位制"):
+            return self._preference_segments(item)
+        unsupported = {"语言": "简体中文（其他语言尚未提供）", "数据自动上传": "未配置云同步服务"}
+        if name in unsupported:
+            b = QPushButton(unsupported[name])
+            b.setObjectName("setVal")
+            b.setEnabled(False)
+            b.setToolTip(unsupported[name])
+            return b
         if typ == "theme":
             wrap = QFrame()
             wh = QHBoxLayout(wrap)
@@ -64,10 +86,12 @@ class SettingsPage(LcsPage):
                 self._theme_btns.append((mode, b))
             return wrap
         if typ == "select":
-            b = QPushButton(item["cur"])
+            b = QComboBox()
+            b.addItems(item["options"])
+            b.setCurrentText(self._prefs.value("preferences/" + name, item["cur"]))
             b.setObjectName("setVal")
             b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _=False, i=item: self._toast(f"{i['n']}：演示功能，暂不支持修改"))
+            b.currentTextChanged.connect(lambda value: self._save_preference(name, value))
             return b
         if typ == "slider":
             s = QSlider(Qt.Horizontal)
@@ -104,15 +128,81 @@ class SettingsPage(LcsPage):
             return b
         return QLabel("")
 
+    def _preference_segments(self, item):
+        wrap = QFrame()
+        layout = QHBoxLayout(wrap)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        name = item["n"]
+        current = self._prefs.value("preferences/" + name, item["cur"])
+        buttons = []
+
+        def choose(value):
+            for option, button in buttons:
+                button.setChecked(option == value)
+                _prop(button, "sel", "on" if option == value else "off")
+            self._save_preference(name, value)
+
+        for option in item["options"]:
+            label = option.split(" (")[0] if name == "单位制" else option
+            button = QPushButton(label)
+            button.setObjectName("segBtn")
+            button.setCheckable(True)
+            button.setChecked(option == current)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setToolTip(option)
+            _prop(button, "sel", "on" if option == current else "off")
+            button.clicked.connect(lambda checked=False, value=option: choose(value))
+            buttons.append((option, button))
+            layout.addWidget(button)
+        return wrap
+
     def _do_action(self, item):
         if item.get("action") == "clearCache":
-            self._toast("已清理 24.6 MB 缓存")
+            self._modal("清除缓存", "仅清理 data/cache 下的普通缓存文件，保留报告和配置。", on_ok=self._clear_cache)
         else:
             self._toast("演示功能")
 
     def _about_modal(self):
         self._modal("关于设备",
-                    "远驰科技 · 智能诊断平台 LCS700\n软件版本 v2.4.1\n序列号 LC20260828-0017\n版权所有 © 2026 远驰科技")
+                    f"远驰科技 · 智能诊断平台\n系统：{platform.system()} {platform.release()}\nPython：{platform.python_version()}\n设备：{platform.node()}")
+
+    def _open_system(self, page):
+        if not QDesktopServices.openUrl(QUrl("ms-settings:" + page)):
+            self._toast("无法打开 Windows 设置，请从开始菜单打开", "error")
+
+    def _save_preference(self, name, value):
+        self._prefs.setValue("preferences/" + name, value)
+        self._prefs.sync()
+        if name == "字体大小":
+            from ui.theme import ThemeManager
+            ThemeManager.instance().apply()
+        if name == "单位制":
+            self._toast("单位偏好已保存；当前诊断数据仍使用原始单位")
+        else:
+            self._toast("已保存" + ("，下次启动生效" if name == "启动界面" else ""))
+
+    def _clear_cache(self):
+        from config.settings import settings
+        root = (Path(settings.data_dir) / "cache").resolve()
+        count = 0
+        size = 0
+        try:
+            if root.exists():
+                for path in root.rglob("*"):
+                    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
+                        continue
+                    length = path.stat().st_size
+                    path.unlink()
+                    size += length
+                    count += 1
+            self._toast(f"已清理 {count} 个缓存文件，释放 {size / 1048576:.2f} MB")
+        except OSError as exc:
+            self._toast(f"部分缓存未清理：{exc}", "error")
+
+    def on_enter(self):
+        from ui.theme import ThemeManager
+        self.set_current_theme(ThemeManager.instance().resolved)
 
     def _pick_theme(self, mode):
         self.set_current_theme(mode)

@@ -11,10 +11,10 @@ QWidget#RunchLogo { }
 /* 顶/底栏可点容器用 QFrame（ClickFrame）：QPushButton sizeHint 忽略内部布局，logo/文字会压塌重叠 */
 QFrame#BrandBtn { background: transparent; border: none; border-radius: 10px; padding: 2px 6px; }
 QFrame#BrandBtn:hover { background: {glass}; }
-QLabel#BrandCn { color: {tx}; font-size: 16px; font-weight: 800; letter-spacing: 1px; }
+QLabel#BrandCn { color: {tx}; font-size: 18px; font-weight: 800; letter-spacing: 1px; }
 QLabel#BrandEn { color: {dim}; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
 QLabel#PageTitlePill { background: {glass}; color: {mut}; border: 1px solid {line};
-  border-radius: 8px; padding: 3px 12px; font-size: 12px; font-weight: 600; }
+  border-radius: 8px; padding: 5px 14px; font-size: 14px; font-weight: 600; }
 QLabel#CnPill { background: {glass}; color: {cyan}; border: 1px solid {acc_line};
   border-radius: 8px; padding: 3px 10px; font-size: 11px; font-weight: 600;
   font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
@@ -86,7 +86,7 @@ QLabel[role="tag"][kind="crit"] { background: {crit_soft}; color: {crit}; border
 QLabel[role="tag"][kind="acc"] { background: {acc_soft}; color: {acc}; border: 1px solid {acc_line}; }
 QLabel[role="tag"][kind="muted"] { background: {glass}; color: {mut}; border: 1px solid {line}; }
 
-/* ── Toast（底栏上方居中） ─────────────────── */
+/* ── Toast（顶栏下方居中） ─────────────────── */
 QLabel#Toast { background: {raise}; color: {tx}; border: 1px solid {line}; border-radius: 10px;
   padding: 10px 18px; font-size: 13px; }
 QLabel#Toast[kind="ok"] { border-color: {ok_line}; color: {ok}; }
@@ -193,13 +193,12 @@ QFrame[symp="item"] { background: {panel}; border: 1px solid {line}; border-radi
   padding: 9px 14px; }
 QFrame[symp="item"]:hover { border-color: {acc_line}; }
 QFrame[symp="item"][sel="on"] { border-color: {acc}; background: {acc_soft}; }
-QLabel#sympChk { background: transparent; border: 1.5px solid {dim}; border-radius: 4px;
-  color: transparent; font-size: 10px; font-weight: 800;
+QLabel#sympChk { background: {panel}; border: 1px solid {line}; border-radius: 5px;
+  color: {acc_ink}; font-size: 12px; font-weight: 700;
   min-width: 16px; max-width: 16px; min-height: 16px; max-height: 16px; }
-QFrame[symp="item"][sel="on"] QLabel#sympChk { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-  stop:0 {acc_grad0}, stop:1 {acc_grad1}); border-color: transparent; color: {acc_ink}; }
+QLabel#sympChk[sel="on"] { background: {acc_grad1}; border-color: {acc_grad1}; color: {acc_ink}; }
 QLabel#sympText { color: {tx}; font-size: 13px; font-weight: 500; }
-QFrame[symp="item"][sel="on"] QLabel#sympText { color: {acc}; font-weight: 600; }
+QLabel#sympText[sel="on"] { color: {acc}; font-weight: 500; }
 
 /* AI 输入条 */
 QFrame[card="ai-bar"] { background: {panel}; border: 1px solid {line};
@@ -222,7 +221,7 @@ QLabel#quickSub { color: {dim}; font-size: 10.5px; }
 /* ── AI 智能诊断页 ───────────────────────── */
 QWidget#page-ai-diagn { background: {board}; }
 QPushButton#CrumbBack { background: transparent; color: {mut}; border: none;
-  padding: 3px 6px; font-size: 13px; font-weight: 600; }
+  padding: 3px 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
 QPushButton#CrumbBack:hover { color: {acc}; }
 QLabel#CrumbText { color: {tx}; font-size: 14px; font-weight: 700; }
 QLabel#VinTag { background: {glass}; color: {cyan}; border: 1px solid {acc_line};
@@ -250,6 +249,7 @@ QLabel#dynTs { color: {dim}; font-size: 10px; font-family: "JetBrains Mono", Con
 QFrame#vehCard { background: {glass}; border: 1px solid {line}; border-radius: {radius}; }
 QLabel#vehKey { color: {dim}; font-size: 11px; }
 QLabel#vehVal { color: {tx}; font-size: 12px; font-weight: 600; }
+QFrame#vehCell { background: transparent; }
 QFrame#dtcRow { background: {glass}; border: 1px solid {line}; border-radius: 9px; }
 QLabel#dtcCode { color: {crit}; font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; font-weight: 700; }
 QFrame#dtcRow[st="his"] QLabel#dtcCode { color: {dim}; }
@@ -262,6 +262,7 @@ QLabel#dtcTag[st="his"] { background: {glass}; color: {dim}; }
 QFrame#resultCard { background: {glass}; border: 1px solid {line}; border-radius: {radius}; }
 QLabel#resultTitle { color: {tx}; font-size: 16px; font-weight: 800; }
 QLabel#resultMeta { color: {dim}; font-size: 11px; }
+QLabel#resultSectionTitle { color: {tx}; font-size: 13px; font-weight: 700; padding-top: 4px; }
 QFrame#causeRow { background: {panel}; border: 1px solid {line}; border-radius: 11px; }
 QLabel#causeRank { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {acc_grad0}, stop:1 {acc_grad1});
   color: {acc_ink}; border-radius: 9px; font-size: 12px; font-weight: 800;
@@ -362,8 +363,12 @@ QLabel#statRV[st="ok"] { color: {ok}; }
 QWidget#page-remote, QWidget#page-remote-ctrl, QWidget#page-remote-invite { background: {board}; }
 QFrame[card="remote-tile"] { background: {glass}; border: 1px solid {line}; border-radius: {radius}; }
 QFrame[card="remote-tile"]:hover { border-color: {acc}; background: {acc_soft}; }
+QFrame[card="remote-steps"] { background: {glass}; border: 1px solid {line}; border-radius: {radius}; }
+QFrame[card="remote-step"] { background: {panel}; border: 1px solid {line}; border-radius: 10px; }
 QLabel#rtName { color: {tx}; font-size: 15px; font-weight: 700; }
 QLabel#rtDesc { color: {dim}; font-size: 12px; }
+QLabel#rtArrow { color: {acc}; font-size: 26px; font-weight: 300; }
+QLabel#rtStepTitle { color: {acc}; font-size: 12px; font-weight: 800; }
 QLabel#rtStep { color: {mut}; font-size: 12px; }
 QLabel#rtStep b { color: {acc}; }
 QFrame#keypad QPushButton { background: {glass}; color: {tx}; border: 1px solid {line};

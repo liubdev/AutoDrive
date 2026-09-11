@@ -213,10 +213,15 @@ class ThemeManager(QObject):
     def _render_css(self) -> str:
         """渲染 QSS（模板/模式/强调色任一变化才重跑正则替换）。"""
         tpl = theme_qss.QSS_TEMPLATE
-        key = (tpl, self.resolved, self.accent)
+        scale = {"小": 0.9, "标准": 1.0, "大": 1.15}.get(
+            QSettings(ORG, APP).value("preferences/字体大小", "标准"), 1.0
+        )
+        key = (tpl, self.resolved, self.accent, scale)
         if self._css_key == key:
             return self._css
         self._css = render_qss(tpl, self.tokens)
+        self._css = re.sub(r"font-size:\s*(\d+(?:\.\d+)?)px",
+                           lambda m: f"font-size: {float(m.group(1)) * scale:g}px", self._css)
         self._css_key = key
         return self._css
 

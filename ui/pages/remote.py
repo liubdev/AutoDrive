@@ -7,9 +7,14 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdi
 
 from ui.lcsdata import REMOTE_CTRL_STEPS
 from ui.pages.base import LcsPage
-from ui.widgets import _prop
+from ui.widgets import IconBox, SvgGlyph, _prop
 
 __all__ = ["RemotePage", "RemoteCtrlPage", "RemoteInvitePage"]
+
+_REMOTE_ICONS = {
+    "control": '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    "invite": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-3-3M16 14h6"/>',
+}
 
 
 class _Tile(QFrame):
@@ -20,11 +25,20 @@ class _Tile(QFrame):
         self._on_tap = on_tap      # 导航回调（RemotePage._go，走已注入的 shell）
         self.setCursor(Qt.PointingHandCursor)
         v = QVBoxLayout(self)
-        v.setContentsMargins(16, 14, 16, 14)
-        v.setSpacing(6)
+        v.setContentsMargins(18, 18, 18, 18)
+        v.setSpacing(8)
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        color = "warn" if key == "remote-invite" else "acc"
+        head.addWidget(IconBox(_REMOTE_ICONS.get("invite" if key == "remote-invite" else "control", ""),
+                              size=40, color=color, icon_size=22))
         t = QLabel(title)
         t.setObjectName("rtName")
-        v.addWidget(t)
+        head.addWidget(t, 1)
+        arrow = QLabel("›")
+        arrow.setObjectName("rtArrow")
+        head.addWidget(arrow)
+        v.addLayout(head)
         d = QLabel(desc)
         d.setObjectName("rtDesc")
         d.setWordWrap(True)
@@ -72,15 +86,28 @@ class RemoteCtrlPage(LcsPage):
         self._add(t)
         row = QHBoxLayout()
         row.setSpacing(16)
-        # 左侧三步说明
-        left = QVBoxLayout()
-        left.setSpacing(10)
+        # 左侧三步说明，使用卡片行对齐设计稿的 steps glass
+        left_card = QFrame()
+        _prop(left_card, "card", "remote-steps")
+        left = QVBoxLayout(left_card)
+        left.setContentsMargins(16, 16, 16, 16)
+        left.setSpacing(12)
         for title, body in REMOTE_CTRL_STEPS:
-            s = QLabel(f"<b>{title}</b>　{body}")
-            s.setObjectName("rtStep")
-            s.setWordWrap(True)
-            left.addWidget(s)
-        row.addLayout(left, 3)
+            step = QFrame()
+            _prop(step, "card", "remote-step")
+            sv = QVBoxLayout(step)
+            sv.setContentsMargins(12, 10, 12, 10)
+            sv.setSpacing(4)
+            name = QLabel(title)
+            name.setObjectName("rtStepTitle")
+            sv.addWidget(name)
+            text = QLabel(body)
+            text.setObjectName("rtStep")
+            text.setTextFormat(Qt.RichText)
+            text.setWordWrap(True)
+            sv.addWidget(text)
+            left.addWidget(step)
+        row.addWidget(left_card, 3)
         # 右侧：ID 输入 + 九宫格
         right = QFrame()
         _prop(right, "card", "remote-tile")

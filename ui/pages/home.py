@@ -84,7 +84,7 @@ class _SympItem(QFrame):
         h = QHBoxLayout(self)
         h.setContentsMargins(0, 0, 0, 0)   # 内边距走 theme.qss [symp="item"] padding
         h.setSpacing(7)
-        self._chk = QLabel("✓")
+        self._chk = QLabel("")
         self._chk.setObjectName("sympChk")  # 16x16 由 theme.qss min/max 约束
         self._chk.setAlignment(Qt.AlignCenter)
         h.addWidget(self._chk)
@@ -93,6 +93,7 @@ class _SympItem(QFrame):
         h.addWidget(lbl)
 
     def set_selected(self, on: bool):
+        self._chk.setText("✓" if on else "")
         # 后代选择器（#sympChk / #sympText 选中态）需连子控件一起重新 polish 才生效
         _set_prop_tree(self, "sel", "on" if on else "off")
 
@@ -116,7 +117,7 @@ class _QuickTile(QFrame):
         v.setSpacing(6)
         v.setAlignment(Qt.AlignCenter)
         # 设计稿 .quick-tile .ic：32px 语义色小方块 + 16px 线稿
-        v.addWidget(IconBox(DEV_ICONS.get(icon, ""), size=32, color=color, icon_size=16),
+        v.addWidget(IconBox(SMALL.get(icon) or DEV_ICONS.get(icon, ""), size=32, color=color, icon_size=18),
                     0, Qt.AlignCenter)
         lbl = QLabel(label)
         lbl.setObjectName("quickName")
@@ -242,6 +243,7 @@ class HomePage(LcsPage):
         self._ai_text = QLineEdit()
         self._ai_text.setObjectName("aiText")
         self._ai_text.setPlaceholderText("描述您的车辆问题...")
+        self._ai_text.returnPressed.connect(self._send_problem)
         bh.addWidget(self._ai_text, 1)
         attach = QPushButton("📎")
         attach.setObjectName("attachBtn")
@@ -257,8 +259,8 @@ class HomePage(LcsPage):
         bh.addWidget(voice)
         self._send_btn = SendButton(size=36)
         self._send_btn.setObjectName("SendBtn")
-        self._send_btn.setToolTip("已收到描述，请点击底部「开始AI智能诊断」")
-        self._send_btn.clicked.connect(lambda: self._toast("已收到，请点击底部「开始AI智能诊断」"))
+        self._send_btn.setToolTip("提交车辆问题")
+        self._send_btn.clicked.connect(self._send_problem)
         bh.addWidget(self._send_btn)
         self._add_layout(self._centered_host("aiBarHost", bar))
 
@@ -282,6 +284,16 @@ class HomePage(LcsPage):
         foot.setObjectName("SecHint")
         foot.setAlignment(Qt.AlignCenter)
         self._add(foot)
+
+    def _send_problem(self):
+        """提交问题前先确认至少有文字描述或已选择故障现象。"""
+        text = self._ai_text.text().strip()
+        selected = bool(self._sel_items)
+        if not text and not selected:
+            self._toast("请先输入车辆问题，或选择一个常见故障现象", "crit")
+            self._ai_text.setFocus()
+            return
+        self._toast("问题已记录，请点击底部「开始AI智能诊断」")
 
     def _rebuild_dev_cards(self):
         while self._dev_grid.count():
@@ -348,17 +360,24 @@ class HomePage(LcsPage):
     def _toggle_item(self, item: str):
         if item in self._sel_items:
             self._sel_items.discard(item)
+            message = f"已取消：{item}"
         else:
             self._sel_items.add(item)
+            message = f"已选择：{item}"
         for b in self._symp_item_btns:
             if isinstance(b, _SympItem):
                 b.set_selected(b._text in self._sel_items)
+        self._toast(message)
 
     def select_device(self, dev_id: str):
+        device = next((d for d in self._devices if d["id"] == dev_id), None)
+        if device is None:
+            return
         self._selected = dev_id
         for did, card in self._dev_cards.items():
             card.set_selected(did == dev_id)
         self.devices_changed.emit()
+        self._toast(f"已选择设备：{device['n']}")
 
     def _add_device_modal(self):
         content = QWidget()

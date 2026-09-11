@@ -30,32 +30,24 @@ class LcsPage(QWidget):
         self._scroll.setFrameShape(QFrame.NoFrame)
         body = QWidget()
         self._body = QVBoxLayout(body)
-        self._body.setContentsMargins(24, 20, 24, 28)
+        self._body.setContentsMargins(26, 20, 26, 20)
         self._body.setSpacing(16)
         self._scroll.setWidget(body)
         lay.addWidget(self._scroll)
 
     def paintEvent(self, event):
-        """对齐 HTML body 背景：底色 + 顶部径向光 + 40px 细网格。"""
+        """深浅主题均使用底色和顶部径向光，无背景网格。"""
         super().paintEvent(event)
         p = QPainter(self)
         p.fillRect(self.rect(), QColor(self._tok("board", "#0b0e14")))
         grad = QRadialGradient(QPointF(self.width() / 2, 0), max(self.width(), 1) * 0.55)
         if self._mode() == "light":
             glow = QColor(56, 189, 248, 18)
-            grid = None
         else:
             glow = QColor(45, 62, 80, 90)
-            grid = QColor(255, 255, 255, 8)
         grad.setColorAt(0.0, glow)
         grad.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.fillRect(self.rect(), grad)
-        if grid is not None:
-            p.setPen(grid)
-            for x in range(0, self.width(), 40):
-                p.drawLine(x, 0, x, self.height())
-            for y in range(0, self.height(), 40):
-                p.drawLine(0, y, self.width(), y)
 
     def _mode(self) -> str:
         tm = ThemeManager.instance()

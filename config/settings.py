@@ -3,6 +3,7 @@ AutoCar global settings
 """
 import os
 import json
+import sys
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -59,7 +60,12 @@ class Settings:
     log_file_max_mb: int = 50
 
     def __post_init__(self):
-        self.data_dir = self.project_root / "data"
+        # MSI 通常安装到 Program Files，运行时数据必须放到用户可写目录。
+        if getattr(sys, "frozen", False):
+            user_root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+            self.data_dir = user_root / "AutoDrive"
+        else:
+            self.data_dir = self.project_root / "data"
         self.logs_dir = self.data_dir / "logs"
         self.reports_dir = self.data_dir / "reports"
         self.config_file = self.data_dir / "config.json"
@@ -68,7 +74,53 @@ class Settings:
             d.mkdir(parents=True, exist_ok=True)
 
         self._load_user_config()
+        self._auto_discover_dts()
         self._ensure_user_config()
+
+    def _auto_discover_dts(self):
+        """DTS 路径有效时保留配置，否则从常见安装位置自动发现并保存。"""
+        if self.dts_exe:
+            configured = Path(os.path.expandvars(os.path.expanduser(str(self.dts_exe))))
+            if configured.is_file():
+                self.dts_exe = str(configured)
+                return
+
+        candidates = []
+        for env_name in ("ProgramFiles(x86)", "ProgramFiles"):
+            base = os.environ.get(env_name)
+            if base:
+                root = Path(base)
+                candidates.extend((root / "DTS").glob("*/DTS650.exe"))
+                candidates.extend((root / "DTS").glob("*/*/DTS650.exe"))
+                candidates.extend((root / "DTS650.exe",))
+        candidates.extend((
+            Path("C:/DTS/DTS650.exe"),
+            Path("C:/DTS/DTS20220525/DTS650.exe"),
+        ))
+
+        for candidate in candidates:
+            try:
+                if candidate.is_file():
+                    self.dts_exe = str(candidate.resolve())
+                    self._write_config()
+                    return
+            except OSError:
+                continue
+
+    def _write_config(self):
+        """写回用户配置，供自动发现的 DTS 路径在下次启动复用。"""
+        data = {k: v for k, v in asdict(self).items()
+                if not k.endswith("_dir")
+                and k not in ("config_file", "project_root", "api_key")}
+        data["_comment"] = (
+            "AutoDrive 用户配置。dts_exe 可手动修改；为空或路径失效时会自动发现 DTS650。"
+            "运行数据位于当前用户的 AutoDrive 数据目录。"
+        )
+        try:
+            with open(self.config_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+        except OSError:
+            pass
 
     def _load_user_config(self):
         """Load user config overrides from JSON file"""
@@ -108,10 +160,7 @@ class Settings:
 
     def save(self):
         """Save current config to file"""
-        data = {k: v for k, v in asdict(self).items()
-                if not k.endswith("_dir") and k != "config_file" and k != "project_root"}
-        with open(self.config_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, default=str)
+        self._write_config()
 
 
 # Global singleton

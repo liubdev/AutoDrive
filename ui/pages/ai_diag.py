@@ -1,7 +1,7 @@
 """AI 智能诊断页：远驰AI 诊断过程 + 当前车辆信息 + AI 诊断结果 + 排查步骤。"""
 
 from PySide6.QtCore import QTime, Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ui.pages.base import LcsPage
 from ui.report import ReportLoader
@@ -46,7 +46,7 @@ class AiDiagPage(LcsPage):
         crumb = QHBoxLayout()
         crumb.setContentsMargins(0, 0, 0, 0)
         crumb.setSpacing(8)
-        back = QPushButton("‹ 返回")
+        back = QPushButton("←  返回")
         back.setObjectName("CrumbBack")
         back.setCursor(Qt.PointingHandCursor)
         back.clicked.connect(lambda: self._go("home"))
@@ -101,19 +101,24 @@ class AiDiagPage(LcsPage):
         veh_head.addStretch(1)
         veh.layout.addLayout(veh_head)
         self._veh_vals = {}
-        grid = QVBoxLayout()
-        grid.setSpacing(6)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(8)
         for key, label in (("vin", "VIN"), ("model", "车型"), ("mileage", "里程"), ("ecu", "ECU")):
-            row = QHBoxLayout()
+            cell = QFrame()
+            cell.setObjectName("vehCell")
+            row = QHBoxLayout(cell)
+            row.setContentsMargins(0, 2, 0, 2)
             k = QLabel(label)
             k.setObjectName("vehKey")
-            k.setFixedWidth(44)
+            k.setFixedWidth(52)
             row.addWidget(k)
             v = QLabel("—")
             v.setObjectName("vehVal")
             v.setWordWrap(True)
             row.addWidget(v, 1)
-            grid.addLayout(row)
+            index = len(self._veh_vals)
+            grid.addWidget(cell, index // 2, index % 2)
             self._veh_vals[key] = v
         veh.layout.addLayout(grid)
         self._veh_dtc_list = QVBoxLayout()
@@ -139,6 +144,10 @@ class AiDiagPage(LcsPage):
         self._causes_lay = QVBoxLayout()
         self._causes_lay.setSpacing(10)
         self._result_card.layout.addLayout(self._causes_lay)
+        self._causes_title = QLabel("可能原因  (Possible Causes)")
+        self._causes_title.setObjectName("resultSectionTitle")
+        self._causes_title.hide()
+        self._result_card.layout.insertWidget(2, self._causes_title)
         # 排查步骤
         self._steps_title = QLabel("建议排查步骤")
         self._steps_title.setObjectName("SecTitle")
@@ -199,6 +208,7 @@ class AiDiagPage(LcsPage):
         _prop(self._dyn_status, "state", "running")
         self._result_tag.hide()
         _clear(self._causes_lay)
+        self._causes_title.hide()
         _clear(self._steps_left)
         _clear(self._step_body)
         self._step_pager.setText("")
@@ -422,6 +432,7 @@ class AiDiagPage(LcsPage):
 
     def render_causes(self, diag_list):
         _clear(self._causes_lay)
+        self._causes_title.setVisible(bool(diag_list))
         for i, c in enumerate(diag_list or [], start=1):
             pct = self._pct_of(c.get("probability"))
             row = QFrame()

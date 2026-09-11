@@ -12,7 +12,7 @@ LCS700 应用外壳：顶部栏 + 页面栈 + 底部栏 + Toast + 模态框。
 
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import QRectF, Qt, QTime, QTimer, Signal
+from PySide6.QtCore import Qt, QTime, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
     QVBoxLayout, QWidget,
@@ -91,9 +91,12 @@ class AppShell(QWidget):
         root.addWidget(self.stack, 1)
         root.addWidget(self._build_bottombar())
 
-        # Toast（底栏上方居中）
+        # Toast（顶栏下方居中）
         self._toast = Toast(self)
         self._toast.hide()
+        self._toast_timer = QTimer(self)
+        self._toast_timer.setSingleShot(True)
+        self._toast_timer.timeout.connect(self._toast.hide)
         # 模态覆盖层
         self._scrim = QFrame(self)
         self._scrim.setObjectName("ModalScrim")
@@ -108,8 +111,8 @@ class AppShell(QWidget):
         bar.setObjectName("TBar")
         bar.setFixedHeight(58)
         h = QHBoxLayout(bar)
-        h.setContentsMargins(16, 0, 12, 0)
-        h.setSpacing(10)
+        h.setContentsMargins(22, 0, 22, 0)
+        h.setSpacing(14)
         # 品牌区（点击回首页，对齐设计稿 data-go="home"）。
         # ClickFrame：QPushButton 的 sizeHint 忽略内部 layout，会压塌 logo/文字。
         brand = ClickFrame()
@@ -117,8 +120,8 @@ class AppShell(QWidget):
         brand.clicked.connect(lambda: self.goPage("home"))
         bh = QHBoxLayout(brand)
         bh.setContentsMargins(0, 0, 0, 0)
-        bh.setSpacing(10)
-        bh.addWidget(RunchLogo(size=34))
+        bh.setSpacing(11)
+        bh.addWidget(RunchLogo(size=36))
         bv = QVBoxLayout()
         bv.setSpacing(0)
         cn = QLabel("远驰科技")
@@ -160,9 +163,9 @@ class AppShell(QWidget):
     def _build_bottombar(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("BBar")
-        bar.setFixedHeight(62)
+        bar.setFixedHeight(60)
         h = QHBoxLayout(bar)
-        h.setContentsMargins(16, 0, 16, 0)
+        h.setContentsMargins(24, 0, 24, 0)
         h.setSpacing(8)
         acc = ClickFrame()
         acc.setObjectName("AccountBtn")
@@ -264,7 +267,8 @@ class AppShell(QWidget):
                 w.deleteLater()
         spec = PAGE_SPECS.get(self._current)
         for btn in (spec.btns if spec else []):
-            b = QPushButton(btn.label)
+            label = f"←  {btn.label}" if btn.label == "返回" else btn.label
+            b = QPushButton(label)
             b.setObjectName("bbBtn")
             _prop(b, "bb", "primary" if btn.cls == "primary" else "")
             b.setCursor(Qt.PointingHandCursor)
@@ -281,12 +285,12 @@ class AppShell(QWidget):
 
     def toast(self, msg: str, kind: str = "ok"):
         self._toast.show_message(msg, kind)
-        # 定位：底栏上方居中
+        # 定位：顶栏下方居中，避免遮挡底部操作区
         self._toast.adjustSize()
         self._toast.move((self.width() - self._toast.width()) // 2,
-                         self.height() - 62 - self._toast.height() - 24)
+                         58 + 20)
         _slide_up(self._toast)
-        QTimer.singleShot(2600, self._toast.hide)
+        self._toast_timer.start(2600)
 
     def show_modal(self, title, body="", ok_text="确定", cancel_text="取消", on_ok=None, content=None):
         self._scrim.setGeometry(self.rect())
@@ -345,4 +349,4 @@ class AppShell(QWidget):
         self._scrim.setGeometry(self.rect())
         if self._toast.isVisible():
             self._toast.move((self.width() - self._toast.width()) // 2,
-                             self.height() - 62 - self._toast.height() - 24)
+                             58 + 20)

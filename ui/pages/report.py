@@ -64,14 +64,6 @@ class ReportListPage(LcsPage):
         head.addWidget(self._count_tag)
         self._add_layout(head)
 
-        # 白纸详情（点击列表行后出现）
-        self._paper = GlassCard()
-        self._paper_lay = QVBoxLayout()
-        self._paper_lay.setSpacing(10)
-        self._paper.layout.addLayout(self._paper_lay)
-        self._paper.hide()
-        self._add(self._paper)
-
         # 诊断报告列表 —— 单一玻璃容器（设计稿 .report-list glass）
         # 表头 + 数据行共用同一套网格（_GRID_STRETCH），保证四列上下对齐
         self._list_card = GlassCard(padding=16)
@@ -79,6 +71,14 @@ class ReportListPage(LcsPage):
         self._list.setSpacing(0)
         self._list_card.layout.addLayout(self._list)
         self._add(self._list_card)
+
+        # 白纸详情放在列表下方，点击“查看”后展开
+        self._paper = GlassCard()
+        self._paper_lay = QVBoxLayout()
+        self._paper_lay.setSpacing(10)
+        self._paper.layout.addLayout(self._paper_lay)
+        self._paper.hide()
+        self._add(self._paper)
 
     def on_enter(self):
         if self._running:

@@ -185,8 +185,9 @@ class MainWindow(QMainWindow):
         self.ai_diag.restart_requested.connect(self._on_restart)
         self.ai_diag.export_requested.connect(self._export_ai_report)
 
-        # 启动即主页
-        self.shell.goPage("home")
+        from PySide6.QtCore import QSettings
+        start = QSettings("AutoDrive", "AutoDrive").value("preferences/启动界面", "主界面")
+        self.shell.goPage("advanced" if start == "高级功能" else "home")
 
     def _wire_bridge(self):
         b = self._bridge

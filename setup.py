@@ -1,25 +1,40 @@
 import sys
+from pathlib import Path
+
+# PySide6 6.11 使用惰性模块属性；cx_Freeze 8.x 的 Qt hook 需要先看到
+# PySide6.QtCore，否则会在 resolve_name 阶段报 QtCore 不存在。
+import PySide6.QtCore  # noqa: F401
+
 from cx_Freeze import Executable, setup
+
+ROOT = Path(__file__).resolve().parent
+ICON = ROOT / "icon.ico"
 
 # 1. 基础编译与依赖配置
 build_exe_options = {
-    "packages": ["os", "sys"],  # 需要强制包含的第三方库/模块
-    "excludes": ["tkinter"],  # 排除用不到的大型库以减小安装包体积
+    "packages": ["ui", "automation", "config", "ai", "vision"],
+    "excludes": ["tkinter"],
     "include_files": [
-        # "config.json"
-    ],  # 需要随程序打包的静态资源（如配置文件、图片、数据库）
+        (str(ROOT / "ui" / "theme.qss"), "ui/theme.qss"),
+        (str(ROOT / "data" / "templates"), "data/templates"),
+        (str(ROOT / "ai" / "templates"), "ai/templates"),
+        (str(ROOT / "ai" / "knowledge"), "ai/knowledge"),
+    ],
 }
 
 # 2. MSI 安装包特定参数配置
 bdist_msi_options = {
-    "add_to_path": True,  # 安装完成后，自动将软件安装路径添加到 Windows 系统环境变量 PATH
-    "initial_target_dir": r"[ProgramFilesFolder]\MyPythonApp",  # 默认安装路径
-    # "install_icon": "icon.ico",  # 在控制面板“添加/删除程序”列表中显示的软件图标
+    "add_to_path": False,
+    "initial_target_dir": r"[ProgramFilesFolder]\AutoDrive",
+    "all_users": True,
+    "upgrade_code": "{B7D9D8AB-2E5A-4B82-9C27-5FEF7F6C9A21}",
     "summary_data": {
-        "author": "autodrive",
-        "comments": "自动化测试工具安装包",
+        "author": "RunchTech",
+        "comments": "RunchTech 车辆诊断与自动化工具",
     },
 }
+if ICON.exists():
+    bdist_msi_options["install_icon"] = str(ICON)
 
 # 3. 运行环境配置（控制台应用 vs 图形界面应用）
 base = None
@@ -30,19 +45,19 @@ if sys.platform == "win32":
 # 4. 可执行文件与快捷方式配置
 executables = [
     Executable(
-        script="main.py",  # 主程序入口文件
+        script="autogui.py",
         base=base,
-        icon="icon.ico",  # 生成的 .exe 文件图标
-        shortcut_name="我的桌面工具",  # 快捷方式显示的名称
-        shortcut_dir="DesktopFolder",  # 自动在桌面创建快捷方式（也可设为 "ProgramMenuFolder" 在开始菜单创建）
+        icon=str(ICON) if ICON.exists() else None,
+        shortcut_name="AutoDrive",
+        shortcut_dir="ProgramMenuFolder",
     )
 ]
 
 # 5. 核心 setup 函数
 setup(
-    name="MyPythonApp",
+    name="AutoDrive",
     version="1.0.0",
-    description="基于 cx_Freeze 构建的示例 MSI 安装包",
+    description="RunchTech 车辆诊断与自动化工具",
     options={
         "build_exe": build_exe_options,
         "bdist_msi": bdist_msi_options,
