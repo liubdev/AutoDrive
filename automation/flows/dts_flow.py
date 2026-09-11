@@ -474,11 +474,17 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
     # 保存列表 → 文件对话框驱动（点击按钮 → 等 DTS 弹窗标题 →
     # 保持默认焦点输入文件名+ENTER → 覆盖确认在弹窗里回车默认按钮）
     save_btn = _wait_enabled_button(app, "1013", "保存列表")
+    if save_btn is None:
+        log.warning("保存列表按钮未就绪，重连 DTS 主窗口后重新查找")
+        if app._reconnect_main(timeout=8):
+            save_btn = _wait_enabled_button(app, "1013", "保存列表", timeout=15)
     log.info("点击 保存列表 按钮")
     if save_btn is not None and app.click_ctrl(save_btn):
         if not app.drive_file_dialog(file_name, mode="save", timeout=10):
             log.warning("保存列表文件对话框未响应，重新点击一次")
             save_btn = _wait_enabled_button(app, "1013", "保存列表")
+            if save_btn is None and app._reconnect_main(timeout=8):
+                save_btn = _wait_enabled_button(app, "1013", "保存列表", timeout=15)
             if save_btn is None or not app.click_ctrl(save_btn) or not app.drive_file_dialog(
                 file_name, mode="save", timeout=10
             ):
@@ -490,11 +496,17 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
 
     # 载入列表 → 文件对话框驱动（同上；不再向主窗盲发多余 ENTER）
     load_btn = _wait_enabled_button(app, "1118", "载入列表")
+    if load_btn is None:
+        log.warning("载入列表按钮未就绪，重连 DTS 主窗口后重新查找")
+        if app._reconnect_main(timeout=8):
+            load_btn = _wait_enabled_button(app, "1118", "载入列表", timeout=15)
     log.info("点击 载入列表 按钮")
     if load_btn is not None and app.click_ctrl(load_btn):
         if not app.drive_file_dialog(file_name, mode="load", timeout=10):
             log.warning("载入列表文件对话框未响应，重新点击一次")
             load_btn = _wait_enabled_button(app, "1118", "载入列表")
+            if load_btn is None and app._reconnect_main(timeout=8):
+                load_btn = _wait_enabled_button(app, "1118", "载入列表", timeout=15)
             if load_btn is None or not app.click_ctrl(load_btn) or not app.drive_file_dialog(
                 file_name, mode="load", timeout=10
             ):

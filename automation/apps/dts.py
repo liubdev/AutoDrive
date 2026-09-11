@@ -926,6 +926,11 @@ class DtsApp(BaseApp):
                         return btn
                 except Exception:
                     continue
+            # 文件对话框的保存/打开操作按钮固定使用 AutomationId=1；
+            # 某些系统仅暴露 SplitButton，标题枚举可能不稳定。
+            btn = root.child_window(auto_id="1", found_index=0)
+            if btn.exists(timeout=0.3):
+                return btn
         except Exception:
             pass
         return None
