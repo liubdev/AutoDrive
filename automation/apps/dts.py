@@ -938,17 +938,15 @@ class DtsApp(BaseApp):
         return self.click_ctrl(btn)
 
     def _wait_dialog_gone(self, dlg: int, wait: float = 6) -> bool:
-        """等弹窗销毁或前台离开它（回车关闭后）；返回是否已关闭/离开。"""
+        """等待弹窗句柄真正销毁，避免仅因焦点变化而误判已关闭。"""
         if not dlg:
             return True
         deadline = time.time() + wait
         while time.time() < deadline:
             if not bg.window_exists(dlg):
                 return True
-            fg = bg.active_window()
-            if fg and fg != dlg:
-                return True
             time.sleep(0.3)
+        logger.warning("弹窗 0x%X 在 %.1fs 内仍未关闭", dlg, wait)
         return False
 
     def confirm_enter_if_dialog(
@@ -961,13 +959,12 @@ class DtsApp(BaseApp):
         失步的根源之一）。这里改为看前台/枚举弹窗：出现 #32770 时优先点击
         "是(Y)"/"确定"，失败再回车兜底；最多 max_times 个连续弹窗。
         """
-        handled = False
+        all_closed = True
         exclude = set(exclude or [])
         for _ in range(max_times):
             dlg = self.wait_fg_dialog(wait=wait, exclude=exclude)
             if not dlg:
                 break
-            handled = True
             logger.info(
                 "检测到确认/覆盖弹窗 0x%X (class=%s title=%r) → 确认",
                 dlg,
@@ -978,9 +975,12 @@ class DtsApp(BaseApp):
                 dlg, ["是(Y)", "是", "确定"], "确认/覆盖弹窗"
             ):
                 bg.send_keys(dlg, "{ENTER}")
-            self._wait_dialog_gone(dlg, wait=4)
+            if not self._wait_dialog_gone(dlg, wait=4):
+                all_closed = False
+                logger.error("确认弹窗 0x%X 未关闭，停止后续文件操作", dlg)
+                break
             exclude.add(dlg)
-        return handled
+        return all_closed
 
     def drive_file_dialog(
         self, file_name: str, mode: str = "save", timeout: float = 12
@@ -1014,9 +1014,13 @@ class DtsApp(BaseApp):
             logger.warning("%s文件对话框未找到操作按钮，回退 Enter", tag)
             bg.send_keys(dlg, "{ENTER}", target_hwnd=edit or None)
         # 覆盖/确认（是否出现不确定：出现才回车默认按钮）
-        self.confirm_enter_if_dialog(wait=2.5, max_times=3, exclude={dlg})
+        if not self.confirm_enter_if_dialog(wait=2.5, max_times=3, exclude={dlg}):
+            logger.error("%s文件对话框后的确认弹窗未完全关闭", tag)
+            return False
         # 等文件对话框真正关闭
-        self._wait_dialog_gone(dlg, wait=8)
+        if not self._wait_dialog_gone(dlg, wait=8):
+            logger.error("%s文件对话框未真正关闭", tag)
+            return False
         return True
 
     def _focus_list(self):
