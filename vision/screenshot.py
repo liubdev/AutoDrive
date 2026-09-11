@@ -24,7 +24,7 @@ class ScreenCapture:
         monitor = self._sct.monitors[1]
         sct = self._sct.grab(monitor)
         Image.frombytes("RGB", sct.size, sct.rgb).save(output)
-        logger.info(f"截图: {output}")
+        logger.debug(f"截图: {output}")
         return output
 
     def region(self, rect: Tuple[int, int, int, int], output: str = None) -> str:

@@ -306,6 +306,25 @@ def _make_go_back(app: DtsApp):
     return action
 
 
+def _wait_enabled_button(app: DtsApp, auto_id: str, title: str, timeout: float = 30):
+    """等待 DTS 按钮完成页面加载并进入可点击状态。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        btn = app.window.child_window(
+            auto_id=auto_id, title=title, control_type="Button", found_index=0
+        )
+        if btn.exists(timeout=0.5):
+            try:
+                if btn.is_enabled():
+                    return btn
+            except Exception:
+                pass
+            log.info("按钮 %s(auto_id=%s)已出现但暂不可用，等待页面加载", title, auto_id)
+        time.sleep(0.5)
+    log.warning("按钮 %s(auto_id=%s)未在 %.1fs 内变为可用", title, auto_id, timeout)
+    return None
+
+
 def _make_nav_data_flow(app: DtsApp):
     def action():
         app.send_keys("{DOWN 2}{ENTER}")
@@ -454,17 +473,13 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
 
     # 保存列表 → 文件对话框驱动（点击按钮 → 等 DTS 弹窗标题 →
     # 保持默认焦点输入文件名+ENTER → 覆盖确认在弹窗里回车默认按钮）
-    save_btn = app.window.child_window(
-        auto_id="1013", control_type="Button", found_index=0
-    )
+    save_btn = _wait_enabled_button(app, "1013", "保存列表")
     log.info("点击 保存列表 按钮")
-    if app.click_ctrl(save_btn):
+    if save_btn is not None and app.click_ctrl(save_btn):
         if not app.drive_file_dialog(file_name, mode="save", timeout=10):
             log.warning("保存列表文件对话框未响应，重新点击一次")
-            save_btn = app.window.child_window(
-                auto_id="1013", control_type="Button", found_index=0
-            )
-            if not app.click_ctrl(save_btn) or not app.drive_file_dialog(
+            save_btn = _wait_enabled_button(app, "1013", "保存列表")
+            if save_btn is None or not app.click_ctrl(save_btn) or not app.drive_file_dialog(
                 file_name, mode="save", timeout=10
             ):
                 log.warning("保存列表文件对话框处理失败")
@@ -474,17 +489,13 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
         return False
 
     # 载入列表 → 文件对话框驱动（同上；不再向主窗盲发多余 ENTER）
-    load_btn = app.window.child_window(
-        auto_id="1118", control_type="Button", found_index=0
-    )
+    load_btn = _wait_enabled_button(app, "1118", "载入列表")
     log.info("点击 载入列表 按钮")
-    if app.click_ctrl(load_btn):
+    if load_btn is not None and app.click_ctrl(load_btn):
         if not app.drive_file_dialog(file_name, mode="load", timeout=10):
             log.warning("载入列表文件对话框未响应，重新点击一次")
-            load_btn = app.window.child_window(
-                auto_id="1118", control_type="Button", found_index=0
-            )
-            if not app.click_ctrl(load_btn) or not app.drive_file_dialog(
+            load_btn = _wait_enabled_button(app, "1118", "载入列表")
+            if load_btn is None or not app.click_ctrl(load_btn) or not app.drive_file_dialog(
                 file_name, mode="load", timeout=10
             ):
                 log.warning("载入列表文件对话框处理失败")

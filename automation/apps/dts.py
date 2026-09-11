@@ -84,7 +84,7 @@ class DtsApp(BaseApp):
             )
             draw.text((tx, ty), text, fill=color)
             image.save(output)
-            logger.info("点击截图[%s][%s]: %s", label, phase, output)
+            logger.debug("点击截图[%s][%s]: %s", label, phase, output)
         except Exception as exc:  # noqa: BLE001
             logger.warning("点击截图[%s][%s]失败: %s", label, phase, exc)
 
