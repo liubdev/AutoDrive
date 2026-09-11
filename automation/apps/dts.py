@@ -947,9 +947,11 @@ class DtsApp(BaseApp):
                     continue
             # 文件对话框的保存/打开操作按钮固定使用 AutomationId=1；
             # 某些系统仅暴露 SplitButton，标题枚举可能不稳定。
-            btn = root.child_window(auto_id="1", found_index=0)
-            if btn.exists(timeout=0.3):
-                return btn
+            if any(t in ("保存(S)", "保存", "打开(O)", "打开") for t in titles):
+                for kind in ("Button", "SplitButton"):
+                    btn = root.child_window(auto_id="1", control_type=kind, found_index=0)
+                    if btn.exists(timeout=0.3) and btn.is_enabled():
+                        return btn
         except Exception:
             pass
         return None
@@ -1069,6 +1071,13 @@ class DtsApp(BaseApp):
         if not self._wait_dialog_gone(dlg, wait=8):
             logger.error("%s文件对话框未真正关闭", tag)
             return False
+        if mode == "load":
+            deadline = time.monotonic() + 30
+            while not load_ready():
+                if time.monotonic() >= deadline:
+                    logger.error("载入后返回按钮未就绪，停止操作")
+                    return False
+                time.sleep(0.3)
         return True
 
     def _focus_list(self):

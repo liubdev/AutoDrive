@@ -455,6 +455,7 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
     # 每个数据流用独立的文件名
     file_name = f"DataFlow_List_{flow_no}.txt"
     log.info(f"  —— 数据流{flow_no} 使用文件: {file_name} ——")
+    phase_started = time.monotonic()
 
     # 翻页 + 全选
     right_btn = app.window.child_window(
@@ -467,9 +468,17 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
                     auto_id=aid, control_type="CheckBox", found_index=0
                 )
                 if cb.exists(timeout=0.5) and cb.get_toggle_state() == 0:
-                    app.click_ctrl(cb)
-            app.click_ctrl(right_btn)
+                    if not app.click_ctrl(cb):
+                        log.error("勾选控件 %s 失败，停止当前数据流", aid)
+                        return False
+            if not right_btn.is_enabled():
+                break
+            if not app.click_ctrl(right_btn):
+                log.error("滚动失败，停止当前数据流")
+                return False
             time.sleep(0.5)
+    log.info("数据流%s 勾选耗时 %.1fs", flow_no, time.monotonic() - phase_started)
+    phase_started = time.monotonic()
 
     # 保存列表 → 文件对话框驱动（点击按钮 → 等 DTS 弹窗标题 →
     # 保持默认焦点输入文件名+ENTER → 覆盖确认在弹窗里回车默认按钮）
@@ -484,20 +493,15 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
     log.info("点击 保存列表 按钮")
     if app.click_ctrl(save_btn):
         if not app.drive_file_dialog(file_name, mode="save", timeout=10):
-            log.warning("保存列表文件对话框未响应，重新点击一次")
-            save_btn = _wait_enabled_button(app, "1013", "保存列表")
-            if save_btn is None and app._reconnect_main(timeout=8):
-                save_btn = _wait_enabled_button(app, "1013", "保存列表", timeout=15)
-            if save_btn is None or not app.click_ctrl(save_btn) or not app.drive_file_dialog(
-                file_name, mode="save", timeout=10
-            ):
-                log.warning("保存列表文件对话框处理失败")
-                return False
+            log.error("保存流程未确认完成，停止操作，不重复提交保存")
+            return False
     else:
         log.error("点击 保存列表 按钮失败，停止第15步")
         return False
 
     # 载入列表 → 文件对话框驱动（同上；不再向主窗盲发多余 ENTER）
+    log.info("数据流%s 保存耗时 %.1fs", flow_no, time.monotonic() - phase_started)
+    phase_started = time.monotonic()
     load_btn = _wait_enabled_button(app, "1118", "载入列表")
     if load_btn is None:
         log.warning("载入列表按钮未就绪，重连 DTS 主窗口后重新查找")
@@ -511,16 +515,14 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
         if not app.drive_file_dialog(file_name, mode="load", timeout=10):
             log.error("载入流程未确认完成，停止操作，不重复提交载入")
             return False
-        time.sleep(5)
+        log.info("数据流%s 载入耗时 %.1fs", flow_no, time.monotonic() - phase_started)
     else:
         log.error("点击 载入列表 按钮失败，停止第15步")
         return False
 
     # 返回
-    back_btn = app.window.child_window(
-        auto_id="1042", control_type="Button", found_index=0
-    )
-    if back_btn.exists(timeout=3):
+    back_btn = _wait_enabled_button(app, "1042", "返回", timeout=10)
+    if back_btn is not None:
         log.info("点击 返回 按钮")
         if not app.click_ctrl(back_btn):
             log.warning("点击 返回 按钮失败")
