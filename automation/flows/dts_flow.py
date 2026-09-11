@@ -509,16 +509,8 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
     log.info("点击 载入列表 按钮")
     if app.click_ctrl(load_btn):
         if not app.drive_file_dialog(file_name, mode="load", timeout=10):
-            log.warning("载入列表文件对话框未响应，重新点击一次")
-            load_btn = _wait_enabled_button(app, "1118", "载入列表")
-            if load_btn is None and app._reconnect_main(timeout=8):
-                load_btn = _wait_enabled_button(app, "1118", "载入列表", timeout=15)
-            if load_btn is None or not app.click_ctrl(load_btn) or not app.drive_file_dialog(
-                file_name, mode="load", timeout=10
-            ):
-                log.warning("载入列表文件对话框处理失败")
-                return False
-        # 载入后 DTS 渲染已载入的数据流列表需要一点时间（原写死 sleep(10)）
+            log.error("载入流程未确认完成，停止操作，不重复提交载入")
+            return False
         time.sleep(5)
     else:
         log.error("点击 载入列表 按钮失败，停止第15步")

@@ -89,8 +89,11 @@ class DtsApp(BaseApp):
             logger.warning("点击截图[%s][%s]失败: %s", label, phase, exc)
 
     def _click_with_trace(self, label: str, x: int, y: int, action) -> bool:
+        # 临时关闭点击截图；需要排查时将此开关设为 True。
+        capture_enabled = False
+        if not capture_enabled:
+            return bool(action())
         self._click_trace_no += 1
-        trace_no = self._click_trace_no
         self._capture_click_snapshot(label, x, y, "before")
         try:
             return bool(action())
@@ -740,16 +743,32 @@ class DtsApp(BaseApp):
         前台窗口，前台不是 DTS 时降级枚举 DTS 顶层弹窗；超时返回 0。
         """
         exclude = set(exclude or [])
+        main_hwnd = self._hwnd()
+
+        def is_dts_shell(hwnd: int) -> bool:
+            # DTS 主界面本身也是 #32770，且可能有多个嵌套句柄；不能当确认弹窗。
+            try:
+                return "DTS服务电话" in (bg.window_title(hwnd) or "")
+            except Exception:
+                return False
+
         deadline = time.time() + wait
         while time.time() < deadline:
             dlg = self._fg_dialog()
-            if dlg and dlg not in exclude:
+            if (
+                dlg
+                and dlg != main_hwnd
+                and dlg not in exclude
+                and not is_dts_shell(dlg)
+            ):
                 return dlg
             for w in find_elements(backend="uia", top_level_only=True):
                 try:
                     hwnd = int(w.handle)
                     if (
                         hwnd not in exclude
+                        and hwnd != main_hwnd
+                        and not is_dts_shell(hwnd)
                         and self.pid
                         and w.process_id == self.pid
                         and w.class_name == "#32770"
@@ -955,14 +974,14 @@ class DtsApp(BaseApp):
         return False
 
     def confirm_enter_if_dialog(
-        self, wait: float = 2.5, max_times: int = 3, exclude=None
+        self, wait: float = 2.5, max_times: int = 3, exclude=None, load_ready=None
     ) -> bool:
-        """文件对话框提交后：若又出现 DTS #32770 弹窗（覆盖/确认）则确认。
+        """文件对话框提交后：若又出现 DTS #32770 弹窗（覆盖/确认）则点击确认。
 
         旧代码在主窗口 self.window 里搜按钮 title="是(Y)" —— 覆盖确认是独立顶层
         弹窗，主窗子树里永远没有，导致 8 轮空等后只能盲打 {ENTER}{ENTER}（状态
-        失步的根源之一）。这里改为看前台/枚举弹窗：出现 #32770 时优先点击
-        "是(Y)"/"确定"，失败再回车兜底；最多 max_times 个连续弹窗。
+        失步的根源之一）。这里改为看前台/枚举弹窗：出现 #32770 时只点击
+        "是(Y)"/"确定"，找不到按钮即失败；最多 max_times 个连续弹窗。
         """
         all_closed = True
         exclude = set(exclude or [])
@@ -979,7 +998,17 @@ class DtsApp(BaseApp):
             if not self._click_dialog_button(
                 dlg, ["是(Y)", "是", "确定"], "确认/覆盖弹窗"
             ):
-                bg.send_keys(dlg, "{ENTER}")
+                if load_ready is not None:
+                    logger.info("窗口 0x%X 无确认按钮，等待载入后的返回按钮就绪", dlg)
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        if load_ready():
+                            logger.info("载入后页面已就绪，继续返回流程")
+                            return True
+                        time.sleep(0.3)
+                all_closed = False
+                logger.error("确认弹窗 0x%X 未找到可点击按钮，禁止发送 Enter", dlg)
+                break
             if not self._wait_dialog_gone(dlg, wait=4):
                 all_closed = False
                 logger.error("确认弹窗 0x%X 未关闭，停止后续文件操作", dlg)
@@ -1016,10 +1045,24 @@ class DtsApp(BaseApp):
             bg.send_keys(dlg, file_name)
         action_titles = ["保存(S)", "保存"] if mode == "save" else ["打开(O)", "打开"]
         if not self._click_dialog_button(dlg, action_titles, f"{tag}文件对话框"):
-            logger.warning("%s文件对话框未找到操作按钮，回退 Enter", tag)
-            bg.send_keys(dlg, "{ENTER}", target_hwnd=edit or None)
-        # 覆盖/确认（是否出现不确定：出现才回车默认按钮）
-        if not self.confirm_enter_if_dialog(wait=2.5, max_times=3, exclude={dlg}):
+            logger.error("%s文件对话框未找到操作按钮，禁止发送 Enter", tag)
+            return False
+        # 覆盖/确认（仅点击明确识别到的确认按钮，不向未知窗口发 Enter）
+        def load_ready():
+            if bg.window_exists(dlg):
+                return False
+            try:
+                back = self.window.child_window(
+                    auto_id="1042", title="返回", control_type="Button", found_index=0
+                )
+                return back.exists(timeout=0.2) and back.is_visible() and back.is_enabled()
+            except Exception:
+                return False
+
+        if not self.confirm_enter_if_dialog(
+            wait=2.5, max_times=3, exclude={dlg},
+            load_ready=load_ready if mode == "load" else None,
+        ):
             logger.error("%s文件对话框后的确认弹窗未完全关闭", tag)
             return False
         # 等文件对话框真正关闭
