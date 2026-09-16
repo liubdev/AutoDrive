@@ -14,11 +14,35 @@ AutoDrive App Modules - 通用 Windows 应用自动化框架
 
 import time
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 
 import psutil
+
+
+def _configure_comtypes_cache() -> None:
+    """将 comtypes 生成的 UIA 包缓存到用户可写目录。
+
+    安装到 Program Files 后，comtypes 默认会尝试写入其 site-packages
+    下的 gen 目录，普通用户没有写权限，导致 pywinauto 导入阶段启动失败。
+    """
+    cache_root = Path(
+        os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
+    ) / "AutoDrive" / "comtypes_gen"
+    cache_root.mkdir(parents=True, exist_ok=True)
+
+    import comtypes.client
+    import comtypes.gen
+
+    cache_path = str(cache_root)
+    comtypes.client.gen_dir = cache_path
+    if cache_path not in comtypes.gen.__path__:
+        comtypes.gen.__path__.append(cache_path)
+
+
+_configure_comtypes_cache()
 from pywinauto import Application
 from pywinauto.findwindows import find_elements
 

@@ -13,7 +13,7 @@ import os, sys, time
 from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from PySide6.QtCore import QSettings
 QSettings("AutoDrive", "AutoDrive").clear()

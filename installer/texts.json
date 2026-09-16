@@ -1,0 +1,37 @@
+{
+  "product": {
+    "name": "AutoDrive 车辆诊断与自动化工具",
+    "manufacturer": "RunchTech",
+    "description": "RunchTech 车辆诊断与自动化工具安装程序"
+  },
+  "welcome": {
+    "title": "欢迎使用 AutoDrive 安装向导",
+    "description": "RunchTech 车辆诊断与自动化工具将引导你完成安装。"
+  },
+  "install_directory": {
+    "title": "选择安装位置",
+    "description": "选择 AutoDrive 的安装目录，然后点击下一步。"
+  },
+  "ready": {
+    "title": "准备安装 AutoDrive",
+    "description": "安装程序已准备就绪，点击安装开始部署。"
+  },
+  "complete": {
+      "title": "AutoDrive 安装完成",
+      "description": "程序已安装成功。选择下列选项，然后点击完成。",
+      "desktop_option": "添加快捷方式到桌面",
+      "launch_option": "启动 AutoDrive"
+  },
+  "uninstall_complete": {
+    "title": "AutoDrive 卸载完成",
+    "description": "程序已卸载。您的个人配置和诊断报告予以保留。"
+  },
+  "repair_complete": {
+    "title": "AutoDrive 修复完成",
+    "description": "程序维护已完成。点击完成退出向导。"
+  },
+  "shortcuts": {
+    "name": "AutoDrive",
+    "description": "RunchTech 车辆诊断与自动化工具"
+  }
+}

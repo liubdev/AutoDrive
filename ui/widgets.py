@@ -1,13 +1,15 @@
 """
-LCS700 基础控件（QPainter 绘制，无图片资源）。
+LCS700 基础控件（QPainter 绘制与品牌图片资源）。
 """
 
 import math
 import re
+import sys
+from pathlib import Path
 from functools import lru_cache
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
@@ -342,7 +344,7 @@ class SvgGlyph(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════
-#  RunchLogo  远驰渐变圆角块 + 白色闪电
+#  RunchLogo  透明品牌图标
 # ═══════════════════════════════════════════════════════════
 
 class RunchLogo(QWidget):
@@ -350,36 +352,25 @@ class RunchLogo(QWidget):
         super().__init__(parent)
         self.setObjectName("RunchLogo")
         self.setFixedSize(size, size)
-        # 几何与闪电 path 与尺寸绑定，构造期缓存一次（paint 只差令牌颜色）
-        s = float(size)
-        m = max(1.0, s * 0.04)
-        self._rect = QRectF(m, m, s - 2 * m, s - 2 * m)
-        self._radius = s * 0.24
-        c = s / 2.0
-        bolt = QPainterPath()
-        bolt.moveTo(c + s * 0.04, self._rect.top() + s * 0.06)
-        bolt.lineTo(c - s * 0.10, c + s * 0.02)
-        bolt.lineTo(c + s * 0.00, c + s * 0.02)
-        bolt.lineTo(c - s * 0.04, self._rect.bottom() - s * 0.06)
-        bolt.lineTo(c + s * 0.12, c - s * 0.04)
-        bolt.lineTo(c + s * 0.02, c - s * 0.04)
-        bolt.closeSubpath()
-        self._bolt = bolt
+        resource = Path(__file__).parent / "assets" / "brand_logo.png"
+        if not resource.is_file() and getattr(sys, "frozen", False):
+            resource = Path(sys.executable).parent / "ui" / "assets" / "brand_logo.png"
+        self._logo = QPixmap(str(resource))
+        # Crop the supplied 1254px master at display time, preserving its alpha
+        # and original artwork while removing the large outer margins.
+        if not self._logo.isNull():
+            self._logo = self._logo.copy(80, 200, 1080, 900)
+        self.setAccessibleName("RunchTech")
 
     def paintEvent(self, event):
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        toks = _tokens()
-        g0 = QColor(toks.get("acc_grad0", "#38bdf8"))
-        g1 = QColor(toks.get("acc_grad1", "#2563eb"))
-        p.setPen(Qt.NoPen)
-        lg = QLinearGradient(self._rect.topLeft(), self._rect.bottomRight())
-        lg.setColorAt(0.0, g0)
-        lg.setColorAt(1.0, g1)
-        p.setBrush(lg)
-        p.drawRoundedRect(self._rect, self._radius, self._radius)
-        p.setBrush(QColor("#FFFFFF"))
-        p.drawPath(self._bolt)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        if not self._logo.isNull():
+            target = self._logo.size().scaled(self.size(), Qt.KeepAspectRatio)
+            rect = QRectF((self.width() - target.width()) / 2,
+                          (self.height() - target.height()) / 2,
+                          target.width(), target.height())
+            p.drawPixmap(rect, self._logo, QRectF(self._logo.rect()))
 
 
 # ═══════════════════════════════════════════════════════════

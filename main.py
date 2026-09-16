@@ -40,7 +40,7 @@ AutoDrive - Windows 应用自动化
   python main.py script <script.py>    执行自动化脚本
 
 示例:
-  python main.py script scripts/run_dts.py
+  python main.py script scripts/tools/run_dts.py
 """)
 
 

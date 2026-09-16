@@ -111,6 +111,8 @@ def main():
         "--include-data-dir=ai=ai",
         # QSS 外部化后必须带上模板文件：theme_qss.py import 时读 ui/theme.qss，缺失则启动崩
         "--include-data-file=ui/theme.qss=ui/theme.qss",
+        "--include-data-file=icon.ico=icon.ico",
+        "--include-data-dir=ui/assets=ui/assets",
         str(ROOT / "autogui.py"),
     ]
 

@@ -24,6 +24,7 @@ _HERE = Path(__file__).parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from config.settings import settings
@@ -52,6 +53,11 @@ def main():
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    icon_path = (_HERE / "icon.ico")
+    if getattr(sys, "frozen", False):
+        icon_path = Path(sys.executable).resolve().parent / "icon.ico"
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     # 延迟导入：必须在 QApplication 之后 import ui.wizard（会拉入 pywinauto/comtypes 链）。
     # 先建 QApplication 让 Qt 拥有主线程 COM(STA)，否则该链会抢先以 MTA 初始化 COM，

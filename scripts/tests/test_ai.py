@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AI 链路验证脚本（本机可跑，无需真车、无需真实 API key）。
 
-用法: python scripts/test_ai.py
+用法: python scripts/tests/test_ai.py
 """
 import io
 import json
@@ -13,7 +13,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")

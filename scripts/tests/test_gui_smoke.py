@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GUI 冒烟：offscreen 实例化 MainWindow，走一遍 LCS700 新 UI 导航 / 主题 / 演示降级 / 真实链路接线。
 
-用法: python scripts/test_gui_smoke.py
+用法: python scripts/tests/test_gui_smoke.py
 目标断言 ≥ 55。
 """
 
@@ -20,7 +20,7 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 PASS, FAIL = 0, 0

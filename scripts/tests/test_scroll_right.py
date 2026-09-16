@@ -5,7 +5,7 @@
 import sys, logging, warnings, time, re
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
 

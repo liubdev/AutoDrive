@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import unittest
 
-source = Path(__file__).resolve().parents[1] / 'automation/background.py'
+source = Path(__file__).resolve().parents[2] / 'automation/background.py'
 tree = ast.parse(source.read_text())
 functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
              and node.name in {'_deepest_child', 'click_at'}]

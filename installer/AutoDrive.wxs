@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+      Name="AutoDrive 车辆诊断与自动化工具"
+      Manufacturer="RunchTech"
+      Version="1.0.1"
+      ProductCode="5EBA9EF7-8994-4F93-A11C-B9827541C994"
+      UpgradeCode="B7D9D8AB-2E5A-4B82-9C27-5FEF7F6C9A21"
+      Scope="perMachine"
+      Compressed="yes">
+    <SummaryInformation Description="RunchTech 车辆诊断与自动化工具安装程序" />
+    <MajorUpgrade DowngradeErrorMessage="检测到更高版本的 AutoDrive，安装程序将退出。" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AutoDriveIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AutoDriveIcon" />
+    <Property Id="AD_CREATE_DESKTOP" Value="1" />
+    <Property Id="AD_LAUNCH" Value="1" />
+    <CustomAction Id="PrepareDesktopShortcut" Property="WixQuietExecCmdLine"
+        Value="&quot;[SystemFolder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[#ShortcutScript]&quot; -Action Create -AppPath &quot;[#AutoDriveExe]&quot;" />
+    <CustomAction Id="CreateDesktopShortcut" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="yes" Return="check" />
+    <SetProperty Id="RemoveDesktopShortcut" Before="RemoveDesktopShortcut" Sequence="execute"
+        Value="&quot;[SystemFolder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[#ShortcutScript]&quot; -Action Remove -AppPath &quot;[#AutoDriveExe]&quot;"
+        Condition="REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    <CustomAction Id="RemoveDesktopShortcut" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Impersonate="yes" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="RemoveDesktopShortcut" Before="RemoveFiles" Condition="REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+    <Property Id="WixShellExecTarget" Value="[#AutoDriveExe]" />
+    <CustomAction
+        Id="LaunchApplication"
+        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+        DllEntry="WixShellExec"
+        Execute="immediate"
+        Impersonate="yes"
+        Return="check" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="AutoDrive" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="AutoDrive" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="MainFeature" Title="AutoDrive" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="ApplicationFiles" />
+      <ComponentRef Id="ApplicationExecutable" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="ShortcutSupport" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.DialogPath)" />
+    <UI>
+      <Publish
+          Dialog="AutoDriveExitDialog"
+          Control="Finish"
+          Event="DoAction"
+          Value="LaunchApplication"
+          Order="3"
+          Condition="AD_LAUNCH = 1 AND NOT REMOVE AND NOT Installed" />
+      <Publish Dialog="AutoDriveExitDialog" Control="Finish" Event="DoAction" Value="PrepareDesktopShortcut" Order="1" Condition="AD_CREATE_DESKTOP = 1 AND NOT REMOVE AND NOT Installed" />
+      <Publish Dialog="AutoDriveExitDialog" Control="Finish" Event="DoAction" Value="CreateDesktopShortcut" Order="2" Condition="AD_CREATE_DESKTOP = 1 AND NOT REMOVE AND NOT Installed" />
+      <Publish Dialog="AutoDriveExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+      <!-- Own the completion dialog so labels and controls share one clean surface. -->
+      <Dialog Id="AutoDriveExitDialog" Width="370" Height="270" Title="AutoDrive">
+        <Control Id="Finish" Type="PushButton" X="286" Y="243" Width="64" Height="18" Default="yes" Cancel="yes" Text="完成" />
+        <Control Id="Brand" Type="Text" X="24" Y="18" Width="320" Height="18" Text="{\WixUI_Font_Title}RunchTech · AutoDrive" />
+        <Control Id="Line" Type="Line" X="20" Y="47" Width="330" Height="0" />
+        <Control Id="InstallTitle" Type="Text" X="24" Y="65" Width="320" Height="28" Text="{\WixUI_Font_Bigger}AutoDrive 安装完成" Hidden="yes" ShowCondition="NOT Installed AND NOT REMOVE" />
+        <Control Id="RemoveTitle" Type="Text" X="24" Y="65" Width="320" Height="28" Text="{\WixUI_Font_Bigger}AutoDrive 卸载完成" Hidden="yes" ShowCondition="REMOVE = &quot;ALL&quot;" />
+        <Control Id="RepairTitle" Type="Text" X="24" Y="65" Width="320" Height="28" Text="{\WixUI_Font_Bigger}AutoDrive 修复完成" Hidden="yes" ShowCondition="Installed AND NOT REMOVE AND REINSTALL" />
+        <Control Id="ChangeTitle" Type="Text" X="24" Y="65" Width="320" Height="28" Text="{\WixUI_Font_Bigger}AutoDrive 维护完成" Hidden="yes" ShowCondition="Installed AND NOT REMOVE AND NOT REINSTALL" />
+        <Control Id="InstallText" Type="Text" X="24" Y="105" Width="320" Height="30" Text="程序已安装成功。选择下列选项，然后点击完成。" Hidden="yes" ShowCondition="NOT Installed AND NOT REMOVE" />
+        <Control Id="RemoveText" Type="Text" X="24" Y="105" Width="320" Height="45" Text="程序已卸载。您的个人配置和诊断报告予以保留。" Hidden="yes" ShowCondition="REMOVE = &quot;ALL&quot;" />
+        <Control Id="RepairText" Type="Text" X="24" Y="105" Width="320" Height="45" Text="程序维护已完成。点击完成退出向导。" Hidden="yes" ShowCondition="Installed AND NOT REMOVE" />
+        <Control Id="DesktopChoice" Type="CheckBox" X="24" Y="153" Width="320" Height="20" Property="AD_CREATE_DESKTOP" CheckBoxValue="1" Text="添加快捷方式到桌面" Hidden="yes" ShowCondition="NOT Installed AND NOT REMOVE" />
+        <Control Id="LaunchChoice" Type="CheckBox" X="24" Y="182" Width="320" Height="20" Property="AD_LAUNCH" CheckBoxValue="1" Text="启动 AutoDrive" Hidden="yes" ShowCondition="NOT Installed AND NOT REMOVE" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+      <InstallUISequence>
+        <Show Dialog="override ExitDialog" Suppress="yes" />
+        <Show Dialog="AutoDriveExitDialog" OnExit="success" />
+      </InstallUISequence>
+      <AdminUISequence>
+        <Show Dialog="override ExitDialog" Suppress="yes" />
+        <Show Dialog="AutoDriveExitDialog" OnExit="success" />
+      </AdminUISequence>
+    </UI>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.AppDir)\**">
+        <Exclude Files="$(var.AppDir)\AutoDrive.exe" />
+      </Files>
+    </ComponentGroup>
+
+    <Component Id="ApplicationExecutable" Directory="INSTALLFOLDER">
+      <File Id="AutoDriveExe" Source="$(var.AppDir)\AutoDrive.exe" KeyPath="yes" />
+    </Component>
+
+    <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder">
+      <Shortcut
+          Id="StartMenuShortcut"
+          Name="AutoDrive"
+          Description="RunchTech 车辆诊断与自动化工具"
+          Target="[INSTALLFOLDER]AutoDrive.exe"
+          Icon="AutoDriveIcon"
+          IconIndex="0"
+          WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
+      <RegistryValue
+          Root="HKLM"
+          Key="Software\RunchTech\AutoDrive"
+          Name="StartMenuShortcut"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+    </Component>
+
+    <Component Id="ShortcutSupport" Directory="INSTALLFOLDER">
+      <File Id="ShortcutScript" Source="$(sys.SOURCEFILEDIR)shortcut.ps1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+</Wix>

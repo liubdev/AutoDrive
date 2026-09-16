@@ -13,8 +13,15 @@ ICON = ROOT / "icon.ico"
 # 1. 基础编译与依赖配置
 build_exe_options = {
     "packages": ["ui", "automation", "config", "ai", "vision"],
-    "excludes": ["tkinter"],
+    # 构建环境中可能安装了 Jupyter/pytest/PyQt6 等开发依赖，产品运行不需要。
+    # 排除它们可避免 MSI 被膨胀到数百 MB 甚至 GB 级别。
+    "excludes": [
+        "tkinter", "IPython", "pytest", "matplotlib", "PyQt6",
+        "jupyter", "notebook", "pandas", "scipy", "sympy",
+    ],
     "include_files": [
+        (str(ICON), "icon.ico"),
+        (str(ROOT / "ui" / "assets"), "ui/assets"),
         (str(ROOT / "ui" / "theme.qss"), "ui/theme.qss"),
         (str(ROOT / "data" / "templates"), "data/templates"),
         (str(ROOT / "ai" / "templates"), "ai/templates"),
@@ -43,20 +50,31 @@ if sys.platform == "win32":
     base = "gui"
 
 # 4. 可执行文件与快捷方式配置
+# cx_Freeze 一个 Executable 只能绑定一个 shortcut_dir，因此用两个启动入口
+# 分别创建开始菜单和桌面快捷方式；两者共享同一套冻结依赖，不会重复打包 DLL。
 executables = [
     Executable(
         script="autogui.py",
+        target_name="AutoDrive.exe",
         base=base,
         icon=str(ICON) if ICON.exists() else None,
         shortcut_name="AutoDrive",
         shortcut_dir="ProgramMenuFolder",
-    )
+    ),
+    Executable(
+        script="autogui.py",
+        target_name="AutoDriveDesktop.exe",
+        base=base,
+        icon=str(ICON) if ICON.exists() else None,
+        shortcut_name="AutoDrive",
+        shortcut_dir="DesktopFolder",
+    ),
 ]
 
 # 5. 核心 setup 函数
 setup(
     name="AutoDrive",
-    version="1.0.0",
+    version="1.0.1",
     description="RunchTech 车辆诊断与自动化工具",
     options={
         "build_exe": build_exe_options,

@@ -2,7 +2,7 @@
 AI 诊断知识库：默认知识加载 + 自定义覆盖。
 
 默认知识来自 ai/knowledge/default.json
-（由 scripts/build_knowledge.py 从 docs/ 三份 spec 程序化抽取）。
+（由 scripts/tools/build_knowledge.py 从 docs/ 三份 spec 程序化抽取）。
 后续支持按车型传入自定义 JSON 覆盖同名项。
 """
 

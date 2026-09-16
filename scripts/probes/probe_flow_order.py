@@ -5,7 +5,7 @@ import os, sys
 from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from automation.flow.engine import FlowEngine, FlowStep, FlowStepError, DONE, PENDING, ERROR
 

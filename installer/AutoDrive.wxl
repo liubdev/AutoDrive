@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="zh-CN">
+  <String Id="WelcomeDlgTitle" Value="欢迎使用 AutoDrive 安装向导" />
+  <String Id="WelcomeDlgDescription" Value="RunchTech 车辆诊断与自动化工具将引导你完成安装。" />
+  <String Id="InstallDirDlgTitle" Value="选择安装位置" />
+  <String Id="InstallDirDlgDescription" Value="选择 AutoDrive 的安装目录，然后点击下一步。" />
+  <String Id="VerifyReadyDlgTitle" Value="准备安装 AutoDrive" />
+  <String Id="VerifyReadyDlgDescription" Value="安装程序已准备就绪，点击安装开始部署。" />
+  <String Id="ExitDialogTitle" Value="AutoDrive 安装完成" />
+  <String Id="ExitDialogDescription" Value="AutoDrive 已安装成功。" />
+</WixLocalization>

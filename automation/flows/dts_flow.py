@@ -1,10 +1,10 @@
 """
 DTS 数据流保存流程 — 配置化定义
 
-把原来的线性脚本 scripts/run_dts.py 移植为 FlowStep 列表：
+把原来的线性脚本 scripts/tools/run_dts.py 移植为 FlowStep 列表：
   每个步骤 = 动作(action) + 验证(wait_for_control) + 重试
 
-GUI (autogui.py) 与控制台 (scripts/run_dts.py) 共用同一份流程定义。
+GUI (autogui.py) 与控制台 (scripts/tools/run_dts.py) 共用同一份流程定义。
 """
 
 import shutil
@@ -19,6 +19,9 @@ from automation.flow.engine import FlowStep
 from config import settings
 
 log = logging.getLogger("autodrive.flow.dts")
+
+_POLL_INTERVAL = 0.2
+_PAGE_SETTLE = 0.25
 
 # 当前运行的日志 handler（挂根 logger，输出到报告目录内同名 .log）。
 # 同进程多次采集时先摘掉上一个再挂新的，避免 handler 累积、旧报告被续写。
@@ -298,7 +301,7 @@ def _make_go_back(app: DtsApp):
         )
         if back_btn.exists(timeout=3):
             app.click_ctrl(back_btn)
-            time.sleep(0.5)
+            time.sleep(_PAGE_SETTLE)
             return True
         log.warning("返回按钮(auto_id=2)不存在")
         return False
@@ -313,14 +316,14 @@ def _wait_enabled_button(app: DtsApp, auto_id: str, title: str, timeout: float =
         btn = app.window.child_window(
             auto_id=auto_id, title=title, control_type="Button", found_index=0
         )
-        if btn.exists(timeout=0.5):
+        if btn.exists(timeout=_POLL_INTERVAL):
             try:
                 if btn.is_enabled():
                     return btn
             except Exception:
                 pass
             log.info("按钮 %s(auto_id=%s)已出现但暂不可用，等待页面加载", title, auto_id)
-        time.sleep(0.5)
+        time.sleep(_POLL_INTERVAL)
     log.warning("按钮 %s(auto_id=%s)未在 %.1fs 内变为可用", title, auto_id, timeout)
     return None
 
@@ -328,9 +331,9 @@ def _wait_enabled_button(app: DtsApp, auto_id: str, title: str, timeout: float =
 def _make_nav_data_flow(app: DtsApp):
     def action():
         app.send_keys("{DOWN 2}{ENTER}")
-        time.sleep(0.5)
+        time.sleep(_PAGE_SETTLE)
         app.send_keys("{DOWN 6}{ENTER}")
-        time.sleep(0.5)
+        time.sleep(_PAGE_SETTLE)
         app.send_keys("{ENTER}")
         return True
 
@@ -439,7 +442,7 @@ def _data_flow_loop(app: DtsApp, out_dir: Path, max_flows: int) -> bool:
         # 切换到下一个数据流: DOWN + ENTER
         log.info("切换到下一个数据流...")
         app.send_keys("{DOWN}")
-        time.sleep(0.5)
+        time.sleep(_PAGE_SETTLE)
         app.send_keys("{ENTER}")
         # 确定
         if not app.wait_for_control("1028", timeout=30):
@@ -467,7 +470,7 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
                 cb = app.window.child_window(
                     auto_id=aid, control_type="CheckBox", found_index=0
                 )
-                if cb.exists(timeout=0.5) and cb.get_toggle_state() == 0:
+                if cb.exists(timeout=_POLL_INTERVAL) and cb.get_toggle_state() == 0:
                     if not app.click_ctrl(cb):
                         log.error("勾选控件 %s 失败，停止当前数据流", aid)
                         return False
@@ -476,7 +479,7 @@ def _process_flow(app: DtsApp, flow_no: int) -> bool:
             if not app.click_ctrl(right_btn):
                 log.error("滚动失败，停止当前数据流")
                 return False
-            time.sleep(0.5)
+            time.sleep(_PAGE_SETTLE)
     log.info("数据流%s 勾选耗时 %.1fs", flow_no, time.monotonic() - phase_started)
     phase_started = time.monotonic()
 
