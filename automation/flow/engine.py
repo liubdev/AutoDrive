@@ -27,6 +27,7 @@ AutoDrive 流程引擎
 import logging
 import threading
 import time
+from config import settings
 from typing import Callable, Dict, List, Optional
 
 # ── 步骤状态 ──
@@ -294,7 +295,7 @@ class FlowEngine:
                 if attempt >= step.retry - 1:
                     self.log(f"  失败后应执行: {step.failure_hint}", "error")
                 if attempt < step.retry - 1:
-                    time.sleep(1)
+                    time.sleep(settings.dts_start_settle)
 
         step.status = ERROR
         return False

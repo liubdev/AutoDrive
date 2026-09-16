@@ -98,7 +98,7 @@ class DtsApp(BaseApp):
         try:
             return bool(action())
         finally:
-            time.sleep(1.2)
+            time.sleep(settings.dts_navigation_settle * 0.6)
             self._capture_click_snapshot(label, x, y, "after")
 
     def click_at(self, x: int, y: int) -> bool:
@@ -203,7 +203,7 @@ class DtsApp(BaseApp):
             ctrl = self._ready_control(**selector)
             if ctrl is not None:
                 return ctrl
-            time.sleep(0.2)
+            time.sleep(settings.dts_poll_interval)
         logger.error("等待 DTS 页面超时: %s", selector)
         return None
 
@@ -272,7 +272,7 @@ class DtsApp(BaseApp):
                 if not self.click_ctrl(btn):
                     return False
                 clicked = True
-            time.sleep(0.2)
+            time.sleep(settings.dts_poll_interval)
         logger.error("启动页面未就绪（确认已点击=%s），停止导航", clicked)
         return False
 
@@ -309,7 +309,7 @@ class DtsApp(BaseApp):
             return False
         # Step 3 刚完成页面切换，先让 DTS 接收完第一次消息点击。
         logger.info("点击进入系统: 一键进入后等待 1.0s，再点击左上入口")
-        time.sleep(1)
+        time.sleep(settings.dts_start_settle)
         anchor = self._wait_ready(
             min(5, timeout),
             auto_id="1185",
@@ -380,7 +380,7 @@ class DtsApp(BaseApp):
                 is not None
             ):
                 return True
-            time.sleep(0.2)
+            time.sleep(settings.dts_poll_interval)
         logger.error("直接进入后页面未就绪")
         return False
 
@@ -390,14 +390,14 @@ class DtsApp(BaseApp):
         if not self._reconnect_main(timeout):
             return False
         super().send_enter()
-        time.sleep(2)
+        time.sleep(settings.dts_navigation_settle)
         return True
 
     def send_space(self, timeout: int = 15) -> bool:
         if not self._reconnect_main(timeout):
             return False
         super().send_space()
-        time.sleep(2)
+        time.sleep(settings.dts_navigation_settle)
         return True
 
     # ── 读取控件文本（通用方法） ────────────────────
@@ -477,7 +477,7 @@ class DtsApp(BaseApp):
             except Exception:
                 pass
 
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
 
         logger.warning("获取列表第一项失败: 未找到 ListItem")
         # self._dump_list_pane()   # 诊断：列表窗格 1131 是否存在 / 有无 ListItem
@@ -654,7 +654,7 @@ class DtsApp(BaseApp):
             return bool(self.window and self.window.set_focus())
         hwnd = self._hwnd()
         if hwnd and bg.force_foreground(hwnd):
-            time.sleep(1)
+            time.sleep(settings.dts_start_settle)
             return True
         return False
 
@@ -688,11 +688,11 @@ class DtsApp(BaseApp):
 
             root = Desktop(backend="uia").window(handle=hwnd)
             edit = root.child_window(control_type="Edit", found_index=0)
-            if edit.exists(timeout=0.5):
+            if edit.exists(timeout=settings.dts_focus_settle):
                 r = edit.rectangle()
                 if r.width() > 0 and r.height() > 0:  # 可见
                     if self.set_focus_bg(edit):
-                        time.sleep(0.3)
+                        time.sleep(settings.dts_ui_settle)
                         logger.info("已聚焦文件名输入框")
                         return True
         except Exception:
@@ -712,7 +712,7 @@ class DtsApp(BaseApp):
             for hwnd in self._edit_search_windows():
                 if hwnd and self._focus_first_edit(hwnd):
                     return True
-            time.sleep(0.5)
+            time.sleep(settings.dts_focus_settle)
         logger.warning("弹窗文件名输入框未在 %ds 内出现/聚焦", timeout)
         return False
 
@@ -776,7 +776,7 @@ class DtsApp(BaseApp):
                         return hwnd
                 except Exception:
                     continue
-            time.sleep(0.25)
+            time.sleep(settings.dts_dialog_poll)
         return 0
 
     def wait_dts_dialog_by_title(self, title_keywords, wait: float = 8) -> int:
@@ -796,7 +796,7 @@ class DtsApp(BaseApp):
             hwnd = self._find_nested_dialog_by_title(title_keywords)
             if hwnd:
                 return hwnd
-            time.sleep(0.25)
+            time.sleep(settings.dts_dialog_poll)
         logger.warning(
             "DTS 文件对话框未在 %.1fs 内出现，标题关键字=%s", wait, title_keywords
         )
@@ -971,7 +971,7 @@ class DtsApp(BaseApp):
         while time.time() < deadline:
             if not bg.window_exists(dlg):
                 return True
-            time.sleep(0.3)
+            time.sleep(settings.dts_ui_settle)
         logger.warning("弹窗 0x%X 在 %.1fs 内仍未关闭", dlg, wait)
         return False
 
@@ -998,7 +998,7 @@ class DtsApp(BaseApp):
                 bg.window_title(dlg),
             )
             if not self._click_dialog_button(
-                dlg, ["是(Y)", "是", "确定"], "确认/覆盖弹窗"
+                dlg, ["是(Y)", "是", "确定", "确认"], "确认/覆盖弹窗"
             ):
                 if load_ready is not None:
                     logger.info("窗口 0x%X 无确认按钮，等待载入后的返回按钮就绪", dlg)
@@ -1007,7 +1007,7 @@ class DtsApp(BaseApp):
                         if load_ready():
                             logger.info("载入后页面已就绪，继续返回流程")
                             return True
-                        time.sleep(0.3)
+                        time.sleep(settings.dts_ui_settle)
                 all_closed = False
                 logger.error("确认弹窗 0x%X 未找到可点击按钮，禁止发送 Enter", dlg)
                 break
@@ -1072,12 +1072,20 @@ class DtsApp(BaseApp):
             logger.error("%s文件对话框未真正关闭", tag)
             return False
         if mode == "load":
+            # 点击车辆/列表提示的“确认”后，DTS 还会异步重建数据流页面。
+            # 先让页面完成一段稳定时间，再判断返回按钮，避免把过渡页当成已加载。
+            settle = max(
+                getattr(settings, "dts_navigation_settle", 2.0),
+                getattr(settings, "dts_page_settle", 0.25),
+            )
+            logger.info("载入确认已完成，等待 DTS 加载数据 %.1fs", settle)
+            time.sleep(settle)
             deadline = time.monotonic() + 30
             while not load_ready():
                 if time.monotonic() >= deadline:
                     logger.error("载入后返回按钮未就绪，停止操作")
                     return False
-                time.sleep(0.3)
+                time.sleep(settings.dts_ui_settle)
         return True
 
     def _focus_list(self):
@@ -1098,7 +1106,7 @@ class DtsApp(BaseApp):
             )
             if pane.exists(timeout=2):
                 self.set_focus_bg(pane)  # 后台=消息式设焦点，不抢前台
-                time.sleep(0.5)
+                time.sleep(settings.dts_page_settle)
                 logger.info("已聚焦列表窗格")
                 return pane
         except Exception as e:
@@ -1112,7 +1120,7 @@ class DtsApp(BaseApp):
             if pane.exists(timeout=1):
                 r = pane.rectangle()
                 self.click_at(r.left + 50, r.top + 30)
-                time.sleep(0.5)
+                time.sleep(settings.dts_page_settle)
                 logger.info("已点击列表聚焦(降级)")
                 return pane
         except Exception as e:
@@ -1130,60 +1138,89 @@ class DtsApp(BaseApp):
         Returns:
             所有复制到的内容列表
         """
-        import tkinter as tk
+        import ctypes
+        import win32clipboard
 
-        root = tk.Tk()
-        root.withdraw()
+        poll = settings.dts_poll_interval
+        settle = settings.dts_page_settle
+        timeout = settings.dts_copy_timeout
+        sequence = ctypes.windll.user32.GetClipboardSequenceNumber
+
+        def wait_for(check, description):
+            deadline = time.monotonic() + timeout
+            while True:
+                value = check()
+                if value:
+                    return value
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(f"故障码复制超时: {description} ({timeout:.1f}s)")
+                time.sleep(min(poll, remaining))
+
+        def read_new_clipboard(previous_sequence):
+            if sequence() == previous_sequence:
+                return None
+            try:
+                win32clipboard.OpenClipboard()
+            except Exception:
+                return None  # Another process may briefly own the clipboard.
+            try:
+                if not win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+                    return None
+                return win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT).strip()
+            finally:
+                win32clipboard.CloseClipboard()
 
         results = []
         last_text = None
 
         pane = self._focus_list()
+        if pane is None:
+            raise RuntimeError("故障码复制失败: 无法聚焦列表")
         for _ in range(3):
             # send_keys_to: 同一 AttachThreadInput 块内 SetFocus(窗格)+投递，
             # 前台守卫即使随后抢走前台也不打断本次方向键
             self.send_keys_to("{UP}", pane)
-            time.sleep(1)
+            time.sleep(settle)
 
         for i in range(max_rows):
             if i > 0:
                 logger.info("选择下一个选项")
                 # 先点列表聚焦，再 DOWN（原子聚焦+投递）
                 pane = self._focus_list()
+                if pane is None:
+                    raise RuntimeError("故障码复制失败: 无法聚焦下一行")
                 self.send_keys_to("{DOWN}", pane)
-                time.sleep(2)
+                time.sleep(settle)
             # 点击复制按钮
             btn = self.window.child_window(
                 auto_id=copy_btn_id, control_type="Button", found_index=0
             )
-            if not btn.exists(timeout=2):
-                logger.warning(f"复制按钮 (auto_id={copy_btn_id}) 不存在")
-                break
+            wait_for(lambda: btn.exists(timeout=0) and btn.is_enabled(), "复制按钮可用")
             logger.info("点击 复制按钮")
-            self.click_ctrl(btn)
-            time.sleep(1)
+            previous_sequence = sequence()
+            if not self.click_ctrl(btn):
+                raise RuntimeError("故障码复制失败: 复制按钮点击失败")
 
             # 复制成功提示
             ok = self.window.child_window(
-                auto_id="2", control_type="Button", found_index=0
+                auto_id="2", title_re=r"^(确定|确认|OK)(\([A-Za-z]\))?$",
+                control_type="Button", found_index=0
             )
+            wait_for(lambda: ok.exists(timeout=0) and ok.is_enabled(), "复制确认按钮出现")
+            # Pin the actual popup button, so the following wait cannot match a
+            # newly exposed parent-page button with the same automation ID.
+            ok_button = ok.wrapper_object()
+            import win32gui
+            ok_handle = int(ok_button.handle)
+            if not ok_handle:
+                raise RuntimeError("故障码复制失败: 确认按钮没有原生句柄")
             logger.info("点击 确认")
-            self.click_ctrl(ok)
-            time.sleep(0.5)
-
-            # 读剪贴板
-            try:
-                text = root.clipboard_get()
-            except Exception:
-                text = ""
-
-            text = text.strip()
-            logger.info("粘贴板内容：")
-            logger.info(text)
-
-            # if not text:
-            #     logger.info(f"  第{i+1}行: 空，停止")
-            #     break
+            if not self.click_ctrl(ok_button):
+                raise RuntimeError("故障码复制失败: 确认按钮点击失败")
+            wait_for(lambda: not win32gui.IsWindow(ok_handle)
+                     or not win32gui.IsWindowVisible(ok_handle), "复制确认弹窗关闭")
+            text = wait_for(lambda: read_new_clipboard(previous_sequence), "本次剪贴板更新且内容非空")
             # 内容与上次重复 → 已到末尾，结束
             if last_text is not None and text == last_text:
                 logger.info(f"  第{i+1}行: 内容重复，复制完成")
@@ -1192,9 +1229,9 @@ class DtsApp(BaseApp):
             results.append(text)
             last_text = text
             logger.info(f"  第{i+1}行: {text[:60]}...")
-            time.sleep(0.5)
+        else:
+            logger.warning("故障码复制达到上限 %d 行，尚未确认列表末尾", max_rows)
 
-        root.destroy()
         logger.info(f"  共复制 {len(results)} 行")
         return results
 
@@ -1365,7 +1402,7 @@ class DtsApp(BaseApp):
                     seen.add(f"{w.class_name}|{w.name}|pid={w.process_id}")
                 except Exception:
                     pass
-            time.sleep(0.5)
+            time.sleep(settings.dts_focus_settle)
         pid = self._find_process()
         if pid:
             logger.warning(
@@ -1392,7 +1429,7 @@ class DtsApp(BaseApp):
             if state is not None:
                 logger.info("DTS 启动页面已就绪: %s", state)
                 return True
-            time.sleep(0.2)
+            time.sleep(settings.dts_poll_interval)
         logger.error("DTS 启动确认弹窗和主页均未在 %ds 内就绪", timeout)
         return False
 

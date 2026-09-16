@@ -104,14 +104,26 @@ class AiDiagPage(LcsPage):
         grid = QGridLayout()
         grid.setHorizontalSpacing(24)
         grid.setVerticalSpacing(8)
-        for key, label in (("vin", "VIN"), ("model", "车型"), ("mileage", "里程"), ("ecu", "ECU")):
+        fields = (
+            ("vin", "VIN"),
+            ("app_software", "应用软件识别"),
+            ("calid", "CALID"),
+            ("ecu_hw_no", "ECU硬件号"),
+            ("ecu_hw_version", "ECU硬件版本"),
+            ("ecu_sw_no", "ECU软件号"),
+            ("ecu_sw_version", "ECU软件版本"),
+            ("erotan", "EROTAN"),
+            ("shop_code", "维修店代码"),
+            ("ecu_program_date", "ECU编程日期"),
+        )
+        for key, label in fields:
             cell = QFrame()
             cell.setObjectName("vehCell")
             row = QHBoxLayout(cell)
             row.setContentsMargins(0, 2, 0, 2)
             k = QLabel(label)
             k.setObjectName("vehKey")
-            k.setFixedWidth(52)
+            k.setFixedWidth(104)
             row.addWidget(k)
             v = QLabel("—")
             v.setObjectName("vehVal")
@@ -317,7 +329,7 @@ class AiDiagPage(LcsPage):
 
     def set_vin(self, info: dict):
         for key, v in self._veh_vals.items():
-            v.setText(info.get(key, "—"))
+            v.setText(info.get(key) or "---")
         vin = info.get("vin", "")
         if vin:
             self._vin_tag.setText(f"VIN · {vin}")
@@ -368,20 +380,26 @@ class AiDiagPage(LcsPage):
         self.set_faults(report.faults)
 
     def _parse_version(self, version: str) -> dict:
-        info = {"vin": "", "model": "", "mileage": "", "ecu": ""}
+        info = {
+            "vin": "", "app_software": "", "calid": "", "ecu_hw_no": "",
+            "ecu_hw_version": "", "ecu_sw_no": "", "ecu_sw_version": "",
+            "erotan": "", "shop_code": "", "ecu_program_date": "",
+        }
+        aliases = {
+            "VIN": "vin", "VIN码": "vin", "应用软件识别": "app_software",
+            "CALID": "calid", "ECU硬件号": "ecu_hw_no", "ECU硬件版本": "ecu_hw_version",
+            "ECU软件号": "ecu_sw_no", "ECU软件版本": "ecu_sw_version",
+            "EROTAN": "erotan", "维修店代码": "shop_code", "ECU编程日期": "ecu_program_date",
+        }
         for line in (version or "").splitlines():
             if ":" in line:
                 k, _, v = line.partition(":")
-                k = k.strip().upper()
-                v = v.strip()
-                if k in ("VIN", "VIN码"):
-                    info["vin"] = v
-                elif k in ("车型", "MODEL"):
-                    info["model"] = v
-                elif k in ("里程", "MILEAGE"):
-                    info["mileage"] = v
-                elif k in ("ECU", "ECU软件号", "ECU软件"):
-                    info["ecu"] = v
+                k = k.strip()
+                v = v.strip().replace("\ufffd", "")
+                # DTS may use private-use glyphs as an unavailable-value placeholder.
+                v = "".join(ch for ch in v if not "\ue000" <= ch <= "\uf8ff").strip()
+                if k in aliases and v and any(ch not in "-" for ch in v):
+                    info[aliases[k]] = v
         return info
 
     # ── 采集计划 / 路试 / 报告 ──────────────────

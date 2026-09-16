@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import psutil
+from config import settings
 
 
 def _configure_comtypes_cache() -> None:
@@ -162,7 +163,7 @@ class BaseApp:
                 self._launched_by_us = True
                 return self._connect_by_handle(win.handle, win.process_id)
 
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
 
         # 超时后的最终尝试
         logger.warning(f"超时 {timeout}s，最终尝试...")
@@ -286,7 +287,7 @@ class BaseApp:
             win = self._find_window_by_pid(pid)
             if win:
                 return self._connect_by_handle(win.handle, pid)
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
         # 再降级：按 exe 名找窗口（处理窗口 PID ≠ 启动 PID 的情况）
         logger.info(f"按 exe 名查找窗口...")
         wins = self._find_windows_by_exe()
@@ -337,7 +338,7 @@ class BaseApp:
             )
             if result:
                 return locator.click(result)
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
 
         logger.warning(f"图片 '{template_name}' 在 {timeout}s 内未出现")
         return False
@@ -364,7 +365,7 @@ class BaseApp:
             result = locator.find_text(text, window_handle=handle)
             if result:
                 return locator.click(result)
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
 
         logger.warning(f"文字 '{text}' 在 {timeout}s 内未找到")
         return False
@@ -380,7 +381,7 @@ class BaseApp:
             result = locator.find_text(text, window_handle=handle)
             if result:
                 return locator.double_click(result)
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
         return False
 
     def double_click_image(
@@ -398,7 +399,7 @@ class BaseApp:
             )
             if result:
                 return locator.double_click(result)
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
         return False
 
     # ── 键盘操作 ──────────────────────────────────────
@@ -438,7 +439,7 @@ class BaseApp:
         """
         for _ in range(times):
             self._send_key_sequence("{ENTER}")
-            time.sleep(0.1)
+            time.sleep(settings.dts_input_interval)
         logger.info(f"  Enter x{times}")
         return self
 
@@ -457,7 +458,7 @@ class BaseApp:
         """
         for _ in range(times):
             self._send_key_sequence("{SPACE}")
-            time.sleep(0.1)
+            time.sleep(settings.dts_input_interval)
         logger.info(f"  Space x{times}")
         return self
 
@@ -573,7 +574,7 @@ class BaseApp:
                     return True
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
         logger.warning(f"控件 {auto_id} 在 {timeout}s 内未出现")
         return False
 
@@ -592,7 +593,7 @@ class BaseApp:
             if result:
                 logger.info(f"✓ 图片 '{template_name}' 已出现")
                 return True
-            time.sleep(0.5)
+            time.sleep(settings.retry_interval)
 
         logger.warning(f"图片 '{template_name}' 在 {timeout}s 内未出现")
         return False
@@ -614,7 +615,7 @@ class BaseApp:
         for item in items:
             current = current.child_window(title=item, control_type="MenuItem")
             current.click()
-            time.sleep(0.3)
+            time.sleep(settings.dts_ui_settle)
 
     def screenshot(self, path: str = None) -> Optional[str]:
         """截图"""

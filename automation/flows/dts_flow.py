@@ -20,8 +20,8 @@ from config import settings
 
 log = logging.getLogger("autodrive.flow.dts")
 
-_POLL_INTERVAL = 0.2
-_PAGE_SETTLE = 0.25
+_POLL_INTERVAL = settings.dts_poll_interval
+_PAGE_SETTLE = settings.dts_page_settle
 
 # 当前运行的日志 handler（挂根 logger，输出到报告目录内同名 .log）。
 # 同进程多次采集时先摘掉上一个再挂新的，避免 handler 累积、旧报告被续写。

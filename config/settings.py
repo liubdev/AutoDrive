@@ -39,6 +39,16 @@ class Settings:
     default_timeout: int = 10          # default element wait timeout (seconds)
     retry_interval: float = 0.5        # retry interval (seconds)
     action_delay: float = 0.2          # delay between actions (seconds)
+    dts_poll_interval: float = 0.2     # state polling cadence (seconds)
+    dts_page_settle: float = 0.25      # short UI settling delay (seconds)
+    dts_copy_timeout: float = 8.0      # clipboard / copy dialog timeout (seconds)
+    dts_input_interval: float = 0.1
+    dts_message_pause: float = 0.05
+    dts_ui_settle: float = 0.3
+    dts_focus_settle: float = 0.5
+    dts_navigation_settle: float = 2.0
+    dts_start_settle: float = 1.0
+    dts_dialog_poll: float = 0.25
     uia_backend: str = "uia"           # pywinauto backend: "uia" or "win32"
 
     # --- Vision ---
@@ -74,8 +84,33 @@ class Settings:
             d.mkdir(parents=True, exist_ok=True)
 
         self._load_user_config()
+        self._validate_dts_timing()
         self._auto_discover_dts()
         self._ensure_user_config()
+
+    def _validate_dts_timing(self):
+        import math
+
+        for name, default, minimum in (
+            ("dts_poll_interval", 0.2, 0.05),
+            ("dts_page_settle", 0.25, 0.0),
+            ("dts_copy_timeout", 8.0, 0.1),
+            ("dts_input_interval", 0.1, 0.0),
+            ("dts_message_pause", 0.05, 0.0),
+            ("dts_ui_settle", 0.3, 0.0),
+            ("dts_focus_settle", 0.5, 0.0),
+            ("dts_navigation_settle", 2.0, 0.0),
+            ("dts_start_settle", 1.0, 0.0),
+            ("dts_dialog_poll", 0.25, 0.05),
+        ):
+            raw = getattr(self, name)
+            try:
+                value = float(raw)
+                if isinstance(raw, bool) or not math.isfinite(value) or value < minimum:
+                    raise ValueError(name)
+            except (TypeError, ValueError, OverflowError):
+                value = default
+            setattr(self, name, value)
 
     def _auto_discover_dts(self):
         """DTS 路径有效时保留配置，否则从常见安装位置自动发现并保存。"""

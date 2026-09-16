@@ -112,6 +112,8 @@ class MainWindow(QMainWindow):
         self._app = None
         self._out_dir = None
         self._report_loader = ReportLoader()
+        self._live_report_timer = None
+        self._live_version_mtime = None
         # 后台自动化：主窗口置顶 + 前台守卫
         self._fg_timer = None
         self._fg_guard_on = False
@@ -339,6 +341,7 @@ class MainWindow(QMainWindow):
                 "请确认已安装 DTS650，或修正 data/config.json 中的 dts_exe 路径后重试")
             return
         self._out_dir = make_output_dir()
+        self._start_live_report_refresh()
         _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
         # 重新执行：报告面板先初始化（清空旧列表 → 采集中等待态），
         # 等新报告生成后 _refresh_report_page 再渲染新内容
@@ -391,6 +394,31 @@ class MainWindow(QMainWindow):
         if rp is not None and hasattr(rp, "prepare_run"):
             rp.prepare_run()
 
+    def _start_live_report_refresh(self):
+        """在采集过程中读取已生成的产物，让车辆信息尽早显示。"""
+        if self._live_report_timer is None:
+            self._live_report_timer = QTimer(self)
+            self._live_report_timer.timeout.connect(self._refresh_live_report)
+        self._live_version_mtime = None
+        self._live_report_timer.start(500)
+
+    def _refresh_live_report(self):
+        if not self._running or not self._out_dir:
+            return
+        version_path = Path(self._out_dir) / "version_info.txt"
+        try:
+            mtime = version_path.stat().st_mtime_ns
+        except OSError:
+            return
+        if mtime == self._live_version_mtime:
+            return
+        self._live_version_mtime = mtime
+        self._load_report(advance=False)
+
+    def _stop_live_report_refresh(self):
+        if self._live_report_timer is not None:
+            self._live_report_timer.stop()
+
     def _refresh_report_page(self):
         """诊断流程收尾：报告面板恢复并刷新，展示新生成的报告（含 AI 结论）。"""
         rp = self.pages.get("report")
@@ -415,7 +443,9 @@ class MainWindow(QMainWindow):
         self.ai_diag.set_dyn_status(f"正在执行: {name}")
 
     def _on_step_done(self, step):
-        pass
+        # 版本信息在第 9 步已经落盘，立即刷新车辆信息卡，不必等全流程结束。
+        if getattr(step, "name", "") == "保存版本信息":
+            self._load_report(advance=False)
 
     def _on_step_error(self, step):
         reason = getattr(step, "error", None)
@@ -493,6 +523,7 @@ class MainWindow(QMainWindow):
 
     def _on_run_finished(self):
         self._running = False
+        self._stop_live_report_refresh()
         _safe_log(logging.INFO, "采集流程结束，自动进入 AI 诊断=%s",
                   self._pending_auto_ai)
         self._stop_fg_guard()

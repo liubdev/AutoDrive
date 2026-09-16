@@ -182,16 +182,27 @@ def _auto_symptom(report) -> str:
 
 
 def vehicle_info(report) -> str:
-    """从 version_info.txt 提取 VIN/ECU 识别行（拼接进 system_info 槽）"""
+    """从 version_info.txt 提取有效车辆/ECU 参数（拼接进 system_info 槽）。"""
     text = getattr(report, "version", "") or ""
     pick = []
+    labels = (
+        "VIN:", "VIN码:", "应用软件识别:", "CALID:", "ECU硬件号:",
+        "ECU硬件版本:", "ECU软件号:", "ECU软件版本:", "EROTAN:",
+        "维修店代码:", "ECU编程日期:",
+    )
     for line in text.splitlines():
         s = line.strip()
         if not s:
             continue
-        if (s.startswith("VIN:") or "应用软件识别" in s or s.startswith("CALID:")
-                or "ECU软件号" in s or "ECU软件版本" in s):
-            pick.append(s)
+        if not any(s.startswith(label) for label in labels):
+            continue
+        key, sep, value = s.partition(":")
+        if not sep:
+            continue
+        value = value.replace("\ufffd", "")
+        value = "".join(ch for ch in value if not "\ue000" <= ch <= "\uf8ff").strip()
+        if value and any(ch != "-" for ch in value):
+            pick.append(f"{key.strip()}: {value}")
     return "\n".join(pick)
 
 

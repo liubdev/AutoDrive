@@ -234,10 +234,12 @@ class ReportListPage(LcsPage):
         # 车辆信息
         pv.addWidget(self._paper_sec("车辆信息"))
         vi = self._parse_version(report.version)
-        for k, v in (("VIN 码", vi.get("vin", "—")),
-                     ("车型", vi.get("model", "—")),
-                     ("里程", vi.get("mileage", "—")),
-                     ("ECU", vi.get("ecu", "—"))):
+        for k, key in (("VIN", "vin"), ("应用软件识别", "app_software"),
+                       ("CALID", "calid"), ("ECU硬件号", "ecu_hw_no"),
+                       ("ECU硬件版本", "ecu_hw_version"), ("ECU软件号", "ecu_sw_no"),
+                       ("ECU软件版本", "ecu_sw_version"), ("EROTAN", "erotan"),
+                       ("维修店代码", "shop_code"), ("ECU编程日期", "ecu_program_date")):
+            v = vi.get(key) or "---"
             pv.addWidget(self._paper_row(k, v))
 
         # 扫描结果
@@ -308,20 +310,27 @@ class ReportListPage(LcsPage):
 
     @staticmethod
     def _parse_version(version: str) -> dict:
-        info = {"vin": "", "model": "", "mileage": "", "ecu": ""}
+        info = {
+            "vin": "", "app_software": "", "calid": "", "ecu_hw_no": "",
+            "ecu_hw_version": "", "ecu_sw_no": "", "ecu_sw_version": "",
+            "erotan": "", "shop_code": "", "ecu_program_date": "",
+        }
+        aliases = {
+            "VIN": "vin", "VIN码": "vin", "应用软件识别": "app_software",
+            "CALID": "calid", "ECU硬件号": "ecu_hw_no", "ECU硬件版本": "ecu_hw_version",
+            "ECU软件号": "ecu_sw_no", "ECU软件版本": "ecu_sw_version",
+            "EROTAN": "erotan", "维修店代码": "shop_code", "ECU编程日期": "ecu_program_date",
+        }
         for line in (version or "").splitlines():
             if ":" not in line:
                 continue
             k, _, v = line.partition(":")
             k, v = k.strip(), v.strip()
-            if k == "VIN":
-                info["vin"] = v
-            elif k == "车型":
-                info["model"] = v
-            elif k == "里程":
-                info["mileage"] = v
-            elif k == "ECU":
-                info["ecu"] = v
+            v = v.replace("\ufffd", "")
+            # Treat DTS private-use placeholder glyphs as an empty value.
+            v = "".join(ch for ch in v if not "\ue000" <= ch <= "\uf8ff").strip()
+            if k in aliases and v and any(ch not in "-" for ch in v):
+                info[aliases[k]] = v
         return info
 
     def _export_markdown(self, meta):

@@ -25,6 +25,7 @@ from ctypes import wintypes
 
 import pywinauto.keyboard as kb
 from pywinauto.keyboard import KeyAction, VirtualKeyAction
+from config import settings
 
 logger = logging.getLogger("autodrive.bg")
 
@@ -225,7 +226,7 @@ def set_text(hwnd: int, text: str) -> bool:
         return False
 
 
-def send_keys(hwnd_top: int, keys: str, pause: float = 0.05,
+def send_keys(hwnd_top: int, keys: str, pause: float = None,
               target_hwnd: int = None, strict_target: bool = False) -> bool:
     """向 DTS 窗口投递键盘输入（pywinauto 语法，如 '{DOWN 2}{ENTER}' / 文件名）。
 
@@ -350,6 +351,8 @@ def _send_click(target: int, sx: int, sy: int, double: bool = False) -> bool:
 
 def click_at(hwnd_top: int, sx: int, sy: int, double: bool = False) -> bool:
     """屏幕坐标 → 最深子窗口的消息式左键单击或双击。"""
+    if pause is None:
+        pause = settings.dts_message_pause
     if not hwnd_top:
         return False
     target = _deepest_child(hwnd_top, sx, sy)
@@ -387,7 +390,7 @@ def foreground_click_at(hwnd: int, sx: int, sy: int) -> bool:
         if not force_foreground(hwnd):
             logger.warning("真实鼠标点击: DTS 无法切换到前台 0x%X", hwnd)
             return False
-        time.sleep(0.2)
+        time.sleep(settings.dts_poll_interval)
         from pywinauto import mouse
 
         mouse.click(coords=(sx, sy))
@@ -410,11 +413,11 @@ def foreground_click_then_enter(hwnd: int, sx: int, sy: int) -> bool:
         if not force_foreground(hwnd):
             logger.warning("真实点击+Enter: DTS 无法切换到前台 0x%X", hwnd)
             return False
-        time.sleep(0.2)
+        time.sleep(settings.dts_poll_interval)
         from pywinauto import mouse
 
         mouse.click(coords=(sx, sy))
-        time.sleep(0.5)
+        time.sleep(settings.dts_focus_settle)
         user32.keybd_event(0x0D, 0, 0, 0)
         user32.keybd_event(0x0D, 0, 2, 0)
         logger.info("真实鼠标点击 (%d,%d)+Enter → DTS 0x%X", sx, sy, hwnd)
