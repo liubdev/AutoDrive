@@ -237,6 +237,8 @@ def send_keys(hwnd_top: int, keys: str, pause: float = None,
     """
     if not hwnd_top:
         return False
+    if pause is None:
+        pause = settings.dts_message_pause
     try:
         actions = kb.parse_keys(keys)
     except Exception as e:  # noqa: BLE001
@@ -351,8 +353,6 @@ def _send_click(target: int, sx: int, sy: int, double: bool = False) -> bool:
 
 def click_at(hwnd_top: int, sx: int, sy: int, double: bool = False) -> bool:
     """屏幕坐标 → 最深子窗口的消息式左键单击或双击。"""
-    if pause is None:
-        pause = settings.dts_message_pause
     if not hwnd_top:
         return False
     target = _deepest_child(hwnd_top, sx, sy)
