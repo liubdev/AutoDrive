@@ -277,6 +277,7 @@ class MainWindow(QMainWindow):
 
     def _on_start_ai(self):
         """校验输入 → 进入 ai-diagn 页 → DTS 走真实采集链路，其余走演示降级。"""
+        _safe_log(logging.INFO, "收到开始诊断请求: 当前页=%s", self.shell.current_page())
         if self._running or self._ai_running:
             return
         dev = self.home.selected_device()
@@ -314,6 +315,7 @@ class MainWindow(QMainWindow):
         self._cancelled = False
         self._dev_status.setText("● 执行中")
         self.ai_diag.set_running(True)
+        self.ai_diag.set_dyn_status("准备启动")
         self.ai_diag.set_status(f"启动 {dev['name']} 自动化…")
 
         app = dev["class"]()
@@ -340,30 +342,39 @@ class MainWindow(QMainWindow):
                 f"DTS 自动化无法启动：未找到诊断程序\n{exe}\n"
                 "请确认已安装 DTS650，或修正 data/config.json 中的 dts_exe 路径后重试")
             return
-        self._out_dir = make_output_dir()
-        self._start_live_report_refresh()
-        _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
-        # 重新执行：报告面板先初始化（清空旧列表 → 采集中等待态），
-        # 等新报告生成后 _refresh_report_page 再渲染新内容
-        self._prepare_report_page()
-        from config.settings import settings
+        try:
+            self._out_dir = make_output_dir()
+            self._start_live_report_refresh()
+            _safe_log(logging.INFO, "输出目录: %s", self._out_dir)
+            # 重新执行：报告面板先初始化（清空旧列表 → 采集中等待态），
+            # 等新报告生成后 _refresh_report_page 再渲染新内容
+            self._prepare_report_page()
+            from config.settings import settings
 
-        _safe_log(logging.INFO,
-                  "开始 DTS 自动化采集: 后台=%s 窗口模式=%s 最小化=%s 提权=%s",
-                  getattr(settings, "dts_background", True),
-                  getattr(settings, "dts_window_mode", "offscreen"),
-                  getattr(settings, "dts_start_minimized", True),
-                  getattr(settings, "dts_elevated", False))
+            _safe_log(logging.INFO,
+                      "开始 DTS 自动化采集: 后台=%s 窗口模式=%s 最小化=%s 提权=%s",
+                      getattr(settings, "dts_background", True),
+                      getattr(settings, "dts_window_mode", "offscreen"),
+                      getattr(settings, "dts_start_minimized", True),
+                      getattr(settings, "dts_elevated", False))
 
-        # DTS 后台自动化：主窗口置顶 + 前台守卫（收尾在 _on_run_finished 清理）
-        self._start_fg_guard()
+            # DTS 后台自动化：主窗口置顶 + 前台守卫（收尾在 _on_run_finished 清理）
+            self._start_fg_guard()
 
-        self._engine = FlowEngine()
-        self._engine.steps = dev["build_flow"](app, self._out_dir)
-        self._wire_engine(self._engine)
-        self.ai_diag.append_dyn("正在与车辆通讯中...")
-        self.ai_diag.set_dyn_status("识别中")
-        threading.Thread(target=self._run_engine, daemon=True).start()
+            self._engine = FlowEngine()
+            self._engine.steps = dev["build_flow"](app, self._out_dir)
+            self._wire_engine(self._engine)
+            self.ai_diag.append_dyn("正在与车辆通讯中...")
+            self.ai_diag.set_dyn_status("识别中")
+            threading.Thread(target=self._run_engine, daemon=True).start()
+        except Exception as e:
+            # GUI 冻结版没有控制台，初始化异常必须同时写日志和反馈到页面。
+            _safe_log(logging.ERROR, "DTS 自动化初始化失败: %s", e)
+            self._running = False
+            self._dev_status.setText("○ 就绪")
+            self.ai_diag.set_running(False)
+            self.ai_diag.show_error(f"DTS 自动化初始化失败：{e}")
+            self._stop_fg_guard()
 
     def _wire_engine(self, eng: FlowEngine):
         b = self._bridge
