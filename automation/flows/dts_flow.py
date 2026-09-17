@@ -68,13 +68,15 @@ def _attach_run_log(out_dir: Path):
 
 
 def make_output_dir(root: Path = None) -> Path:
-    """创建带时间戳的输出目录 data/reports/DTS_YYYYMMDD_HHMMSS/
+    """创建带时间戳的输出目录 reports/DTS_YYYYMMDD_HHMMSS/
 
-    同时把本次运行的日志挂到该目录内同名 .log（与报告名字保持一致）。
+    默认使用 settings.reports_dir，确保 MSI 安装到 Program Files 后仍写入
+    当前用户可写目录；传入 root 时保留旧的自定义根目录行为。同步把本次
+    运行的日志挂到该目录内同名 .log（与报告名字保持一致）。
     """
-    root = root or Path(__file__).resolve().parent.parent.parent
+    root = Path(root) if root is not None else Path(settings.reports_dir)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = root / "data" / "reports" / f"DTS_{ts}"
+    out_dir = root / f"DTS_{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)
     _attach_run_log(out_dir)
     return out_dir
