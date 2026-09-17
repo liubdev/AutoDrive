@@ -24,8 +24,9 @@ _HERE = Path(__file__).parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from config.settings import settings
 
@@ -63,9 +64,22 @@ def main():
     # 先建 QApplication 让 Qt 拥有主线程 COM(STA)，否则该链会抢先以 MTA 初始化 COM，
     # 导致 Qt OleInitialize() 失败 (0x80010106)。
     from ui.wizard import MainWindow
+    from ui.auth import LoginDialog
 
     win = MainWindow()
+    # 登录阶段不显示未认证的客户端内容，登录成功后再打开主界面。
+    login = LoginDialog()
+    if login.exec() != QDialog.DialogCode.Accepted:
+        return
+    win.setWindowOpacity(0.0)
     win.show()
+    show_anim = QPropertyAnimation(win, b"windowOpacity", win)
+    show_anim.setDuration(280)
+    show_anim.setStartValue(0.0)
+    show_anim.setEndValue(1.0)
+    show_anim.setEasingCurve(QEasingCurve.OutCubic)
+    win._show_anim = show_anim
+    show_anim.start()
     sys.exit(app.exec())
 
 

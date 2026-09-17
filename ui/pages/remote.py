@@ -25,23 +25,24 @@ class _Tile(QFrame):
         self._on_tap = on_tap      # 导航回调（RemotePage._go，走已注入的 shell）
         self.setCursor(Qt.PointingHandCursor)
         v = QVBoxLayout(self)
-        v.setContentsMargins(18, 18, 18, 18)
-        v.setSpacing(8)
-        head = QHBoxLayout()
-        head.setSpacing(10)
+        v.setContentsMargins(24, 28, 24, 24)
+        v.setSpacing(10)
         color = "warn" if key == "remote-invite" else "acc"
-        head.addWidget(IconBox(_REMOTE_ICONS.get("invite" if key == "remote-invite" else "control", ""),
-                              size=40, color=color, icon_size=22))
+        icon = IconBox(_REMOTE_ICONS.get("invite" if key == "remote-invite" else "control", ""),
+                       size=64, color=color, icon_size=32)
+        v.addWidget(icon, 0, Qt.AlignHCenter)
         t = QLabel(title)
         t.setObjectName("rtName")
-        head.addWidget(t, 1)
+        t.setAlignment(Qt.AlignCenter)
+        v.addWidget(t)
         arrow = QLabel("›")
         arrow.setObjectName("rtArrow")
-        head.addWidget(arrow)
-        v.addLayout(head)
+        arrow.setAlignment(Qt.AlignCenter)
+        v.addWidget(arrow)
         d = QLabel(desc)
         d.setObjectName("rtDesc")
         d.setWordWrap(True)
+        d.setAlignment(Qt.AlignCenter)
         v.addWidget(d)
 
     def mousePressEvent(self, event):

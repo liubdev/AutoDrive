@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
 )
@@ -55,14 +55,9 @@ class ReportListPage(LcsPage):
         self._build_ui()
 
     def _build_ui(self):
-        head = QHBoxLayout()
-        t = QLabel("诊断报告")
-        t.setObjectName("homeTitle")
-        head.addWidget(t)
-        head.addStretch(1)
         self._count_tag = StatusTag("", "acc")
-        head.addWidget(self._count_tag)
-        self._add_layout(head)
+        self._count_tag.setObjectName("ReportCountTag")
+        self._count_tag.setFixedHeight(22)
 
         # 诊断报告列表 —— 单一玻璃容器（设计稿 .report-list glass）
         # 表头 + 数据行共用同一套网格（_GRID_STRETCH），保证四列上下对齐
@@ -119,6 +114,13 @@ class ReportListPage(LcsPage):
                      for r in DEMO_REPORTS]
         self._count_tag.setText(f"{len(metas)} 份报告" + (" · 演示数据" if demo else ""))
         self._clear_list()
+        list_head = QHBoxLayout()
+        list_title = QLabel("诊断报告列表")
+        list_title.setObjectName("reportListTitle")
+        list_head.addWidget(list_title)
+        list_head.addStretch(1)
+        list_head.addWidget(self._count_tag)
+        self._list.addLayout(list_head)
         if not metas:
             hint = QLabel("暂无诊断报告，请先运行一次 AI 智能诊断")
             hint.setObjectName("rlEmpty")
@@ -156,6 +158,8 @@ class ReportListPage(LcsPage):
         if last:
             _prop(row, "last", "1")   # 最后一行无下边框（设计稿 .rl-row:last-child）
         g = self._grid()
+        # 数据行对应设计稿的上下内边距，避免文字贴近分隔线。
+        g.setContentsMargins(14, 10, 14, 10)
 
         time_lbl = QLabel(meta.time)
         time_lbl.setObjectName("rlTime")
@@ -279,6 +283,7 @@ class ReportListPage(LcsPage):
             self._paper_lay.addWidget(exp)
         self._paper.show()
         self._paper_lay.addStretch(1)
+        QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self._paper))
 
     @staticmethod
     def _paper_sec(title) -> QLabel:
