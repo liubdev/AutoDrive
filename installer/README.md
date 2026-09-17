@@ -47,12 +47,12 @@ dist\AutoDrive-Setup.msi
 安装模式，双击时可能出现一次普通权限到管理员权限的界面切换；如果需要彻底
 消除这类闪烁，应进一步增加 WiX Burn 引导器。
 
-当前版本为 1.0.1，ProductCode 在该版本内固定，重复运行同一 MSI 可进入维护模式。
+当前版本为 1.0.2，ProductCode 在该版本内固定，重复运行同一 MSI 可进入维护模式。
 发布更高版本时同时更新 setup.py 和 AutoDrive.wxs 中的版本，并为新版本生成新的
 ProductCode，保持 UpgradeCode 不变。不要用同一版本号发布内容不同的正式安装包。
 
 发布验收应在 Windows Sandbox 或测试机完成：全选安装、取消两个选项安装、
-删除程序文件后修复、卸载、1.0.0 升级到 1.0.1；每项检查快捷方式、文件和完成页。
+删除程序文件后修复、卸载、旧版本升级到 1.0.2；每项检查快捷方式、文件和完成页。
 
 项目脚本已按用途整理到 `scripts/tests`、`scripts/probes` 和 `scripts/tools`。
 根目录下的 `scripts/run_dts.py`、`scripts/run_dts_last_step.py`、

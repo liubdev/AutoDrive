@@ -4,8 +4,8 @@
   <Package
       Name="AutoDrive 车辆诊断与自动化工具"
       Manufacturer="RunchTech"
-      Version="1.0.1"
-      ProductCode="5EBA9EF7-8994-4F93-A11C-B9827541C994"
+      Version="1.0.2"
+      ProductCode="8A8CB8E4-4E5D-4AFB-9AF8-7E37A4D54C12"
       UpgradeCode="B7D9D8AB-2E5A-4B82-9C27-5FEF7F6C9A21"
       Scope="perMachine"
       Compressed="yes">

@@ -23,7 +23,7 @@ try {
     $properties = @{}
     foreach ($row in (Read-Table 'SELECT `Property`, `Value` FROM `Property`')) { $properties[$row[0]] = $row[1] }
     if ($properties.AD_CREATE_DESKTOP -ne '1' -or $properties.AD_LAUNCH -ne '1') { throw 'Default choices missing' }
-    if ($properties.ProductVersion -ne '1.0.1') { throw 'Unexpected product version' }
+    if ($properties.ProductVersion -ne '1.0.2') { throw 'Unexpected product version' }
     $sequence = Read-Table 'SELECT `Action`, `Sequence` FROM `InstallUISequence`'
     if (-not ($sequence | Where-Object { $_[0] -eq 'AutoDriveExitDialog' -and $_[1] -eq '-1' })) { throw 'Completion page missing' }
     if ($sequence | Where-Object { $_[0] -eq 'ExitDialog' }) { throw 'Old completion page still scheduled' }

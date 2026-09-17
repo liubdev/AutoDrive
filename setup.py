@@ -74,7 +74,7 @@ executables = [
 # 5. 核心 setup 函数
 setup(
     name="AutoDrive",
-    version="1.0.1",
+    version="1.0.2",
     description="RunchTech 车辆诊断与自动化工具",
     options={
         "build_exe": build_exe_options,
