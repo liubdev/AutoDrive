@@ -1451,8 +1451,24 @@ class DtsApp(BaseApp):
             if task is None:
                 logger.warning("计划任务提权启动失败，回退普通启动")
                 self._pid = bg.launch(self.APP_EXE, minimized=self.start_minimized).pid
+            else:
+                # launch_elevated 返回的是计划任务名，不是 DTS PID；启动后重新查找真实进程。
+                self._pid = None
         elif self.background:
-            self._pid = bg.launch(self.APP_EXE, minimized=self.start_minimized).pid
+            try:
+                self._pid = bg.launch(self.APP_EXE, minimized=self.start_minimized).pid
+            except OSError as exc:
+                if getattr(exc, "winerror", None) != 740:
+                    raise
+                logger.warning("普通启动需要管理员权限，尝试计划任务提权启动")
+                task = bg.launch_elevated(self.APP_EXE)
+                if task is None:
+                    raise RuntimeError(
+                        "DTS650 需要管理员权限，请将 dts_elevated 设为 true，"
+                        "或以管理员身份运行 AutoDrive"
+                    ) from exc
+                # launch_elevated 返回的是计划任务名，不是 DTS PID；启动后重新查找真实进程。
+                self._pid = None
         else:
             import subprocess
 

@@ -11,6 +11,8 @@ AutoDrive 桌面版（PySide6）
 """
 
 import logging
+import ctypes
+import subprocess
 import sys
 import warnings
 from datetime import datetime
@@ -26,7 +28,7 @@ if str(_HERE) not in sys.path:
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from config.settings import settings
 
@@ -49,11 +51,63 @@ def _setup_logging():
     root.addHandler(fh)
 
 
+def _is_admin() -> bool:
+    """Return whether the current process has an elevated administrator token."""
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def _relaunch_as_admin() -> bool:
+    """Relaunch this source script or frozen executable through the UAC prompt."""
+    if getattr(sys, "frozen", False):
+        executable = str(Path(sys.executable).resolve())
+        parameters = subprocess.list2cmdline(sys.argv[1:])
+    else:
+        executable = str(Path(sys.executable).resolve())
+        parameters = subprocess.list2cmdline([str(Path(__file__).resolve()), *sys.argv[1:]])
+    try:
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", executable, parameters, str(_HERE), 1
+        )
+        return result > 32
+    except OSError:
+        return False
+
+
+def _ask_admin_startup(app: QApplication) -> bool:
+    """Ask once at startup; return False when the relaunch request was accepted."""
+    if _is_admin():
+        return True
+    choice = QMessageBox.question(
+        None,
+        "启动权限确认",
+        "AutoDrive 需要管理员权限才能稳定启动 DTS 诊断仪。\n\n"
+        "是否现在以管理员身份重新启动？",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.Yes,
+    )
+    if choice != QMessageBox.StandardButton.Yes:
+        return True
+    if _relaunch_as_admin():
+        return False
+    QMessageBox.warning(
+        None,
+        "管理员启动失败",
+        "未能以管理员身份重新启动。程序将继续以当前权限运行，\n"
+        "如果 DTS 无法启动，请右键 AutoDrive 选择“以管理员身份运行”。",
+    )
+    return True
+
+
 def main():
     _setup_logging()
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    if not _ask_admin_startup(app):
+        return
     icon_path = (_HERE / "icon.ico")
     if getattr(sys, "frozen", False):
         icon_path = Path(sys.executable).resolve().parent / "icon.ico"
