@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 
 from ui.lcsdata import DEMO_REPORTS
@@ -13,6 +13,7 @@ from ui.report import (
     ReportLoader, ReportMeta, ReportStore, build_demo_ai_report, build_demo_report,
 )
 from ui.widgets import GlassCard, StatusTag, _prop
+from ui.report_view import ReportViews
 
 __all__ = ["ReportListPage"]
 
@@ -274,13 +275,17 @@ class ReportListPage(LcsPage):
         pv.addSpacing(8)
         pv.addWidget(self._paper_row("技师签名", "李翔（认证技师 · 中级）"))
         pv.addWidget(self._paper_row("诊断日期", meta.time))
-        self._paper_lay.addWidget(paper)
+        result = QWidget()
+        result_layout = QVBoxLayout(result)
+        result_layout.setContentsMargins(0, 0, 0, 0)
+        result_layout.addWidget(paper)
         if meta.out_dir:
             exp = QPushButton("导出 Markdown")
             exp.setProperty("role", "primary")
             exp.setCursor(Qt.PointingHandCursor)
             exp.clicked.connect(lambda _=False: self._export_markdown(meta))
-            self._paper_lay.addWidget(exp)
+            result_layout.addWidget(exp)
+        self._paper_lay.addWidget(ReportViews(result))
         self._paper.show()
         self._paper_lay.addStretch(1)
         QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self._paper))

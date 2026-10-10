@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushBut
 
 from ui.pages.base import LcsPage
 from ui.report import ReportLoader
+from ui.report_view import ReportViews
 from ui.widgets import (
     GlassCard, GradBar, PhaseBar, StatusTag, _prop,
 )
@@ -186,7 +187,8 @@ class AiDiagPage(LcsPage):
         self._step_pager.setObjectName("SecHint")
         self._step_pager.setAlignment(Qt.AlignCenter)
         self._result_card.layout.addWidget(self._step_pager)
-        self._add(self._result_card)
+        self._result_views = ReportViews(self._result_card)
+        self._add(self._result_views)
 
         # 操作按钮
         act = QHBoxLayout()
@@ -215,6 +217,7 @@ class AiDiagPage(LcsPage):
     def _set_waiting(self):
         """整页回到空态（重新执行时调用）：清空上一次的动态信息 / 车辆信息 /
         故障码 / 诊断结果，等待新流程的内容渲染，而不是旧内容残留。"""
+        self._result_views.show_result()
         self._status_lbl.setText("等待运行数据")
         self._dyn_status.setText("等待开始")
         _prop(self._dyn_status, "state", "running")

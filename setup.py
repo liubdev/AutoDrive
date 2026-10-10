@@ -13,6 +13,8 @@ ICON = ROOT / "icon.ico"
 # 1. 基础编译与依赖配置
 build_exe_options = {
     "packages": ["ui", "automation", "config", "ai", "vision"],
+    # Trigger cx_Freeze's Qt hooks for the lazy-loaded HTML reader and Chromium resources.
+    "includes": ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
     # 构建环境中可能安装了 Jupyter/pytest/PyQt6 等开发依赖，产品运行不需要。
     # 排除它们可避免 MSI 被膨胀到数百 MB 甚至 GB 级别。
     "excludes": [

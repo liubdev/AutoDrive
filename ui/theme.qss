@@ -62,6 +62,12 @@ QPushButton[role="mini"] { background: {panel}; color: {mut}; border: 1px solid 
   border-radius: 8px; padding: 6px 14px; font-size: 12px; }
 QPushButton[role="mini"]:disabled { color: {dim}; background: transparent; opacity: 0.5; }
 QPushButton[role="mini"]:hover { color: {acc}; border-color: {acc_line}; background: {acc_soft}; }
+QPushButton[role="report-tab"] { background: {panel}; color: {mut};
+  border: 1px solid {line}; border-radius: 9px; padding: 8px 20px;
+  font-size: 13px; font-weight: 600; }
+QPushButton[role="report-tab"]:hover { color: {acc}; border-color: {acc_line}; }
+QPushButton[role="report-tab"]:checked { color: {acc}; background: {acc_soft};
+  border-color: {acc_line}; }
 QPushButton[role="link"] { background: transparent; color: {acc}; border: none;
   font-size: 12px; padding: 2px 4px; }
 QPushButton[role="link"]:hover { text-decoration: underline; }

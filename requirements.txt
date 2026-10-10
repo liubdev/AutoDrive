@@ -1,4 +1,5 @@
 # AutoCar 依赖
+PySide6>=6.5              # 桌面界面与内嵌 HTML 手册 (Qt WebEngine)
 pywinauto>=0.6.8          # Windows UI Automation 控件驱动
 comtypes>=1.1.11          # pywinauto 依赖 (COM 接口)
 Pillow>=9.0.0             # 图像处理

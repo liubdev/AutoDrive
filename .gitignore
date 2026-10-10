@@ -13,6 +13,8 @@ build/
 # --- IDE ---
 .idea/
 .vscode/
+.codegraph/
+.cursor/rules/codegraph.mdc
 *.swp
 *.swo
 *~

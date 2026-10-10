@@ -26,7 +26,7 @@ _HERE = Path(__file__).parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation
+from PySide6.QtCore import QCoreApplication, QEasingCurve, QPropertyAnimation, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
@@ -104,6 +104,7 @@ def _ask_admin_startup(app: QApplication) -> bool:
 def main():
     _setup_logging()
 
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     if not _ask_admin_startup(app):

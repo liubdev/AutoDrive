@@ -1,0 +1,2422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MD1CS089 快速排查手册 V6</title>
+<style>
+  :root{ --ink:#1a2332; --sub:#5a6b82; --line:#d5dde8; --bg:#f4f6f9; --card:#fff;
+    --accent:#c8501e; --accent2:#1a5fa8; --ok:#1e7d43; --warn:#b3261e; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:"Microsoft YaHei","PingFang SC",sans-serif; background:var(--bg); color:var(--ink); font-size:15px; line-height:1.7;}
+  .wrap{max-width:1080px; margin:0 auto; padding:22px 18px 70px;}
+  header{background:#12263f; color:#fff; border-radius:10px; padding:20px 26px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;}
+  header h1{font-size:21px;}
+  header .codes{font-size:13px; color:#ffb46a; font-family:Consolas,monospace;}
+  section{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px 24px; margin-bottom:18px;}
+  h2{font-size:17.5px; color:#12263f; border-left:5px solid var(--accent); padding-left:11px; margin-bottom:12px;}
+  h2 .d{font-weight:400; font-size:13.5px; color:var(--sub); margin-left:10px;}
+  code.p{background:#eef2f7; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-family:Consolas,monospace; font-size:13px; color:#0d3b6e;}
+  .fc{display:inline-block; font-family:Consolas,monospace; font-size:12.5px; background:#12263f; color:#ffb46a; border-radius:4px; padding:1px 8px; margin-right:6px;}
+  ol.st{margin:6px 0 10px; padding-left:0; list-style:none; counter-reset:s;}
+  ol.st>li{counter-increment:s; position:relative; padding:7px 0 7px 36px; border-bottom:1px dashed #e3e9f0;}
+  ol.st>li:last-child{border-bottom:none;}
+  ol.st>li::before{content:counter(s); position:absolute; left:2px; top:8px; width:23px; height:23px; border-radius:50%; background:var(--accent2); color:#fff; font-size:13px; text-align:center; line-height:23px;}
+  .judge{background:#f3f8f4; border:1px solid #cfe5d5; border-left:4px solid var(--ok); border-radius:6px; padding:8px 14px; margin:10px 0; font-size:14px;}
+  .judge b{color:var(--ok);}
+  .warn{background:#fdf3f2; border:1px solid #f0cfcb; border-left:4px solid var(--warn); border-radius:6px; padding:8px 14px; margin:10px 0; font-size:13.5px;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13.5px;}
+  th,td{border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top;}
+  th{background:#eef3f9; white-space:nowrap;}
+  .fig{border:1px solid var(--line); border-radius:8px; padding:14px; margin:12px 0; background:#fdfdfe; overflow-x:auto;}
+  .fig .cap{font-size:12.5px; color:var(--sub); text-align:center; margin-top:6px;}
+  .cause{border:1px solid var(--line); border-left:5px solid var(--accent2); border-radius:8px; padding:14px 18px; margin:14px 0; background:#fbfcfe;}
+  .cause h3{font-size:15.5px; color:var(--accent2); margin-bottom:8px;}
+  .cause h3 .no{display:inline-block; background:var(--accent2); color:#fff; border-radius:5px; font-size:12.5px; padding:1px 9px; margin-right:8px;}
+  svg text{font-family:"Microsoft YaHei",sans-serif;}
+  @media print{body{background:#fff;} section,.cause{break-inside:avoid;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>MD1CS089 快速排查手册</h1>
+  <div class="codes">P0100 · P0193 · P0242 · P0251 · P009B · P21C7 · P0435 · P203F · P213A · P208A</div>
+</header>
+
+<!-- ============ 排查顺序总览 ============ -->
+<section>
+<h2>排查顺序总览<span class="d">按优先级依次执行，每个故障码均有对应详解步骤</span></h2>
+<div class="fig">
+<svg viewBox="0 0 1000 250" width="100%" style="min-width:860px">
+  <g font-size="11.5" font-weight="bold" text-anchor="middle">
+    <!-- 第一行 -->
+    <rect x="5"   y="20" width="156" height="64" rx="7" fill="#1e7d43"/>
+    <text x="83"  y="44" fill="#fff">① 5V供电模块1</text>
+    <text x="83"  y="62" fill="#d5efe0" font-size="10" font-weight="normal">公共供电先查</text>
+    <text x="83"  y="77" fill="#d5efe0" font-size="10" font-weight="normal">P0193 P0242 P213A</text>
+    <rect x="171" y="20" width="156" height="64" rx="7" fill="#c8501e"/>
+    <text x="249" y="44" fill="#fff">② P0193</text>
+    <text x="249" y="62" fill="#ffe2cf" font-size="10" font-weight="normal">轨压传感器</text>
+    <text x="249" y="77" fill="#ffe2cf" font-size="10" font-weight="normal">信号电压过高</text>
+    <rect x="337" y="20" width="156" height="64" rx="7" fill="#1a5fa8"/>
+    <text x="415" y="44" fill="#fff">③ P0242</text>
+    <text x="415" y="62" fill="#cfe0f5" font-size="10" font-weight="normal">增压压力传感器</text>
+    <text x="415" y="77" fill="#cfe0f5" font-size="10" font-weight="normal">信号电压过高</text>
+    <rect x="503" y="20" width="156" height="64" rx="7" fill="#1a5fa8"/>
+    <text x="581" y="44" fill="#fff">④ P0100</text>
+    <text x="581" y="62" fill="#cfe0f5" font-size="10" font-weight="normal">空气流量计</text>
+    <text x="581" y="77" fill="#cfe0f5" font-size="10" font-weight="normal">信号电压过高</text>
+    <rect x="669" y="20" width="156" height="64" rx="7" fill="#1a5fa8"/>
+    <text x="747" y="44" fill="#fff">⑤ P0435</text>
+    <text x="747" y="62" fill="#cfe0f5" font-size="10" font-weight="normal">SCR上游排温</text>
+    <text x="747" y="77" fill="#cfe0f5" font-size="10" font-weight="normal">信号电压过高</text>
+    <rect x="835" y="20" width="156" height="64" rx="7" fill="#a8542a"/>
+    <text x="913" y="44" fill="#fff">⑥ P0251</text>
+    <text x="913" y="62" fill="#ffe2cf" font-size="10" font-weight="normal">计量单元MeUn</text>
+    <text x="913" y="77" fill="#ffe2cf" font-size="10" font-weight="normal">驱动电路开路</text>
+    <!-- 换行连接（横平竖直） -->
+    <line x1="913" y1="84" x2="913" y2="110" stroke="#8a97a8" stroke-width="2"/>
+    <line x1="913" y1="110" x2="83"  y2="110" stroke="#8a97a8" stroke-width="2"/>
+    <line x1="83"  y1="110" x2="83" y2="126" stroke="#8a97a8" stroke-width="2"/>
+    <!-- 第二行 -->
+    <rect x="5"   y="126" width="156" height="64" rx="7" fill="#a8542a"/>
+    <text x="83"  y="150" fill="#fff">⑦ P009B</text>
+    <text x="83"  y="168" fill="#ffe2cf" font-size="10" font-weight="normal">轨压控制阀PCV</text>
+    <text x="83"  y="183" fill="#ffe2cf" font-size="10" font-weight="normal">驱动电路开路</text>
+    <rect x="171" y="126" width="156" height="64" rx="7" fill="#6a3ba8"/>
+    <text x="249" y="150" fill="#fff">⑧ P21C7</text>
+    <text x="249" y="168" fill="#e2d4f5" font-size="10" font-weight="normal">SCR主继电器</text>
+    <text x="249" y="183" fill="#e2d4f5" font-size="10" font-weight="normal">开路故障</text>
+    <rect x="337" y="126" width="156" height="64" rx="7" fill="#6a3ba8"/>
+    <text x="415" y="150" fill="#fff">⑨ P208A</text>
+    <text x="415" y="168" fill="#e2d4f5" font-size="10" font-weight="normal">尿素泵(柱塞泵)</text>
+    <text x="415" y="183" fill="#e2d4f5" font-size="10" font-weight="normal">驱动电路开路</text>
+    <rect x="503" y="126" width="156" height="64" rx="7" fill="#6a3ba8"/>
+    <text x="581" y="150" fill="#fff">⑩ P213A</text>
+    <text x="581" y="168" fill="#e2d4f5" font-size="10" font-weight="normal">EGR阀H桥</text>
+    <text x="581" y="183" fill="#e2d4f5" font-size="10" font-weight="normal">驱动电路开路</text>
+    <rect x="669" y="126" width="156" height="64" rx="7" fill="#5a6b82"/>
+    <text x="747" y="150" fill="#fff">⑪ P203F</text>
+    <text x="747" y="168" fill="#e3e9f0" font-size="10" font-weight="normal">尿素液位低</text>
+    <text x="747" y="183" fill="#e3e9f0" font-size="10" font-weight="normal">激活限扭</text>
+    <rect x="835" y="126" width="156" height="64" rx="7" fill="#12263f"/>
+    <text x="913" y="150" fill="#fff">⑫ 清码路试</text>
+    <text x="913" y="168" fill="#9fc3e8" font-size="10" font-weight="normal">全部维修完成后</text>
+    <text x="913" y="183" fill="#9fc3e8" font-size="10" font-weight="normal">统一验证</text>
+  </g>
+  <g font-size="16" fill="#8a97a8" text-anchor="middle" font-weight="bold">
+    <text x="166" y="58">→</text><text x="332" y="58">→</text><text x="498" y="58">→</text>
+    <text x="664" y="58">→</text><text x="830" y="58">→</text>
+    <text x="166" y="164">→</text><text x="332" y="164">→</text><text x="498" y="164">→</text>
+    <text x="664" y="164">→</text><text x="830" y="164">→</text>
+  </g>
+  <text x="500" y="228" text-anchor="middle" font-size="11.5" fill="#5a6b82">主线：公共供电 → 传感器（信号过高）→ 燃油执行器 → SCR链路/EGR → 液位 → 清码验证</text>
+</svg>
+<div class="cap">排查主线：先公共供电 → 再传感器 → 再执行器链路 → 最后液位 → 清码验证</div>
+</div>
+</section>
+
+<!-- ============ 故障总结（先看这里） ============ -->
+<section>
+<h2>故障总结 · 先看这里<span class="d">10个故障码不是10个病，实际是 4条故障主线 + 3个独立项</span></h2>
+
+<div class="judge" style="font-size:15px;">
+<b>总结论：</b>这批故障码<b>大概率只有 2 个主因</b>——① <b>5V供电模块1异常</b>（或模块1上某传感器内部对5V短路，一口气带起 P0193 / P0242 / P213A）；② <b>SCR主继电器开路</b>（P21C7是上游原因，直接引发 P208A）。<b>先把这两个主因修掉、清码路试，10个码可能消掉5个</b>，剩下的再逐码排查，不要10个码同时铺开修。
+</div>
+
+<h3 style="font-size:15px; color:#12263f; margin:14px 0 6px;">一、主因判定（按嫌疑大小排序）</h3>
+<table>
+<tr><th style="width:120px;">主线</th><th>故障码</th><th>最可能的故障点（按概率）</th><th>判定依据</th><th style="width:150px;">怎么修</th></tr>
+<tr>
+  <td><b style="color:#1e7d43;">主因①<br>5V供电模块1</b></td>
+  <td><span class="fc">P0193</span><span class="fc">P0242</span><span class="fc">P213A</span></td>
+  <td>1) 模块1上某传感器内部对5V短路，把整组信号拉异常（最可能）<br>2) 模块1输出本身异常（&gt;5.25V）<br>3) 某条信号线对电源短路</td>
+  <td>轨压(A42)、增压压力(A41)、EGR位置(A40)<b>三个传感器共用同一个5V模块1</b>，且前两个码同为"信号电压过高"——同供电、同故障方向，指向公共源头</td>
+  <td>按<b>步骤一</b>：测模块1输出5V±0.25V → 异常用<b>负载移除法</b>逐一拔传感器定位 → 修好后转步骤二/三/十确认</td>
+</tr>
+<tr>
+  <td><b style="color:#6a3ba8;">主因②<br>SCR主继电器</b></td>
+  <td><span class="fc">P21C7</span>→<span class="fc">P208A</span></td>
+  <td>1) 继电器线圈开路（最可能，断电测线圈≠83.3Ω即坏）<br>2) 继电器插座触点烧蚀 / K22控制线断</td>
+  <td>尿素泵 pin3 的12V电源<b>直接来自SCR主继电器87脚</b>——继电器不吸合，尿素泵必失电报P208A。<b>P208A大概率是P21C7的"连坐"故障，不用单独修泵</b></td>
+  <td>按<b>步骤八</b>：拔继电器测线圈83.3Ω → ∞直接换继电器 → 清码看P208A是否同步消失</td>
+</tr>
+<tr>
+  <td><b style="color:#a8542a;">主线③<br>燃油执行器</b></td>
+  <td><span class="fc">P0251</span><span class="fc">P009B</span></td>
+  <td>1) 两执行器公共高端供电/保险异常（两码同报时优先）<br>2) 计量单元线圈开路（3.4Ω）<br>3) PCV本体或线束开路</td>
+  <td>计量单元与PCV同为"驱动电路开路"、共用高端供电路径——<b>同报先查公共供电，单报才先怀疑本体</b></td>
+  <td>按<b>步骤六/七</b>：先公共高端12V → 再测本体电阻（MeUn 3.4Ω / PCV几Ω级）</td>
+</tr>
+<tr>
+  <td><b style="color:#5a6b82;">独立项</b></td>
+  <td><span class="fc">P0100</span><span class="fc">P0435</span><span class="fc">P203F</span></td>
+  <td>见下方"二、暂不能直接锁定的故障码"</td>
+  <td>供电、信号链路与上述主线无交集，各自独立排查</td>
+  <td>主因修完清码后仍在的，再按对应步骤查</td>
+</tr>
+</table>
+
+<h3 style="font-size:15px; color:#12263f; margin:16px 0 6px;">二、暂不能直接锁定原因的故障码（列出可能原因，按序排查）</h3>
+<table>
+<tr><th>故障码</th><th>可能原因（按概率排序）</th><th>第一步做什么</th></tr>
+<tr><td><span class="fc">P0100</span>空气流量计</td><td>① HFM本体损坏 ② 流量信号线(pin3/K86)对5V短路 ③ ECU内部故障<br><span style="color:#b3261e;">注意：K86为下拉型，不起动时开路0V且对地导通是正常设计，勿误判为线路故障</span></td><td>按<b>步骤四</b>：拔插头测开路电压（pin4=5V / pin2=地），再短接pin3↔pin2看故障码是否翻转</td></tr>
+<tr><td><span class="fc">P0435</span>SCR上游排温</td><td>① 传感器线束根部断线（该位置高发）② 传感器本体失效 ③ 信号线(A36)对电源短路</td><td>按<b>步骤五</b>：断电先测本体电阻——∞直接换传感器；200℃时约350Ω为正常</td></tr>
+<tr><td><span class="fc">P203F</span>尿素液位低</td><td>① <b>真的缺尿素（绝大多数情况）</b> ② 液位/品质传感器CAN通讯异常 ③ 传感器12V供电或接地故障</td><td>按<b>步骤十一</b>：先开尿素箱盖看实际液位——低就加注32.5%尿素清码；液位正常再断电5分钟测CAN-H↔CAN-L=60Ω</td></tr>
+</table>
+
+<h3 style="font-size:15px; color:#12263f; margin:16px 0 6px;">三、推荐维修次序（先主因、后验证、再收尾）</h3>
+<div class="fig">
+<svg viewBox="0 0 1000 150" width="100%" style="min-width:760px">
+  <g font-size="12" font-weight="bold" text-anchor="middle">
+    <rect x="10" y="30" width="290" height="76" rx="8" fill="#1e7d43"/>
+    <text x="155" y="56" fill="#fff">第1步 · 修两个主因</text>
+    <text x="155" y="76" fill="#d5efe0" font-size="10.5" font-weight="normal">① 5V模块1（负载移除法定位）</text>
+    <text x="155" y="93" fill="#d5efe0" font-size="10.5" font-weight="normal">② SCR主继电器（测83.3Ω）</text>
+    <rect x="355" y="30" width="290" height="76" rx="8" fill="#1a5fa8"/>
+    <text x="500" y="56" fill="#fff">第2步 · 清码 + 路试</text>
+    <text x="500" y="76" fill="#cfe0f5" font-size="10.5" font-weight="normal">P0193 P0242 P213A P21C7 P208A</text>
+    <text x="500" y="93" fill="#cfe0f5" font-size="10.5" font-weight="normal">应同步消失，消失即确认根因</text>
+    <rect x="700" y="30" width="290" height="76" rx="8" fill="#12263f"/>
+    <text x="845" y="56" fill="#fff">第3步 · 剩余码进详解</text>
+    <text x="845" y="76" fill="#9fc3e8" font-size="10.5" font-weight="normal">仍在的码按下方步骤六~十一</text>
+    <text x="845" y="93" fill="#9fc3e8" font-size="10.5" font-weight="normal">逐码排查，最后统一清码验证</text>
+  </g>
+  <g font-size="18" fill="#8a97a8" text-anchor="middle" font-weight="bold">
+    <text x="328" y="76">→</text><text x="673" y="76">→</text>
+  </g>
+  <text x="500" y="136" text-anchor="middle" font-size="11.5" fill="#5a6b82">原则：主因不修，从因白修；每修完一个主因就清一次码，用"故障码是否消失"来验证判断</text>
+</svg>
+</div>
+</section>
+
+<!-- ============ 步骤一 ============ -->
+<section>
+<h2>步骤一 · 查5V供电模块1（公共供电）<span class="d"><span class="fc">P0193</span><span class="fc">P0242</span><span class="fc">P213A</span>三个码先查这一步</span></h2>
+
+<div class="fig">
+<svg viewBox="0 0 1000 400" width="100%" style="min-width:800px">
+  <!-- ECU 左侧 -->
+  <rect x="25" y="40" width="250" height="300" rx="8" fill="#12263f"/>
+  <text x="150" y="30" text-anchor="middle" font-size="14" font-weight="bold" fill="#12263f">MD1CS089 ECU</text>
+  <rect x="45" y="58" width="210" height="46" rx="5" fill="#1e7d43"/>
+  <text x="150" y="77" text-anchor="middle" fill="#fff" font-size="12.5">5V供电模块1</text>
+  <text x="150" y="95" text-anchor="middle" fill="#d5efe0" font-size="10.5">标准输出 5V±0.25V</text>
+  <!-- ECU 输出脚 -->
+  <g font-size="11.5" fill="#fff">
+    <circle cx="275" cy="140" r="5" fill="#ffb46a"/>
+    <text x="262" y="145" text-anchor="end">A42 输出</text>
+    <circle cx="275" cy="220" r="5" fill="#ffb46a"/>
+    <text x="262" y="225" text-anchor="end">A41 输出</text>
+    <circle cx="275" cy="300" r="5" fill="#ffb46a"/>
+    <text x="262" y="305" text-anchor="end">A40 输出</text>
+  </g>
+  <text x="150" y="320" text-anchor="middle" font-size="10.5" fill="#9fc3e8">同模块另有：A37凸轮轴</text>
+  <text x="150" y="336" text-anchor="middle" font-size="10.5" fill="#9fc3e8">A38尿素压力 · K41 DPF压差</text>
+  <!-- 三条水平直线 -->
+  <line x1="275" y1="140" x2="470" y2="140" stroke="#1e7d43" stroke-width="3"/>
+  <line x1="275" y1="220" x2="470" y2="220" stroke="#1e7d43" stroke-width="3"/>
+  <line x1="275" y1="300" x2="470" y2="300" stroke="#1e7d43" stroke-width="3"/>
+  <g font-size="11" fill="#1e7d43" font-weight="bold">
+    <text x="360" y="132">+5V</text><text x="360" y="212">+5V</text><text x="360" y="292">+5V</text>
+  </g>
+  <!-- 传感器盒 -->
+  <g font-size="11.5">
+    <rect x="470" y="105" width="500" height="72" rx="7" fill="#eef3f9" stroke="#d5dde8"/>
+    <circle cx="470" cy="140" r="5" fill="#1e7d43"/>
+    <text x="488" y="128" font-weight="bold" fill="#12263f">轨压传感器 ★P0193（详解见步骤二）</text>
+    <text x="488" y="148" fill="#5a6b82">插头 pin3=5V · pin2=信号(A62) · pin1=接地(A63)</text>
+    <text x="488" y="166" fill="#5a6b82">信号开路电压 5V（上拉型）</text>
+
+    <rect x="470" y="185" width="500" height="72" rx="7" fill="#eef3f9" stroke="#d5dde8"/>
+    <circle cx="470" cy="220" r="5" fill="#1e7d43"/>
+    <text x="488" y="208" font-weight="bold" fill="#12263f">增压（进气）压力传感器 ★P0242</text>
+    <text x="488" y="228" fill="#5a6b82">插头 pin3=5V · pin4=信号(A60) · pin1=接地(A82)</text>
+    <text x="488" y="246" fill="#5a6b82">信号开路电压 5.7V（正常特征，勿误判）</text>
+
+    <rect x="470" y="265" width="500" height="72" rx="7" fill="#eef3f9" stroke="#d5dde8"/>
+    <circle cx="470" cy="300" r="5" fill="#1e7d43"/>
+    <text x="488" y="288" font-weight="bold" fill="#12263f">EGR阀位置传感器 ★P213A</text>
+    <text x="488" y="308" fill="#5a6b82">插头 pin6=5V · pin5=信号(A79) · pin4=接地(A78)</text>
+    <text x="488" y="326" fill="#5a6b82">位置反馈异常可致H桥驱动保护关闭 → 报开路码</text>
+  </g>
+  <!-- 判定栏 -->
+  <rect x="25" y="355" width="945" height="38" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="40" y="379" font-size="12" fill="#1e7d43" font-weight="bold">测量：Key-ON，背刺任一传感器 5V 脚对地 = 5V±0.25V；异常时逐个拔插头，拔到谁恢复 → 谁内部短路</text>
+</svg>
+<div class="cap">图1 · 5V供电模块1输出与对应传感器（三个故障码共用此检查）</div>
+</div>
+
+<ol class="st">
+<li>Key-ON，万用表黑表笔搭铁，红表笔背刺<strong>轨压或进气压力传感器插头的 5V 脚</strong>，标准 <strong>5V±0.25V</strong>。</li>
+<li>电压正常 → 供电没问题，进入<strong>步骤二</strong>排查 P0193。</li>
+<li>电压异常 → 依次拔开模块1上的传感器插头（轨压、进气压力、EGR阀、凸轮轴、尿素压力、DPF压差）。</li>
+<li>拔到某一个后 5V 恢复正常 → 该传感器内部短路，<strong>直接更换</strong>；全部拔完仍异常 → 线束对电源短路或 ECU 供电模块损坏。</li>
+</ol>
+</section>
+
+<!-- ============ 步骤二 P0193 详解 ============ -->
+<section>
+<h2>步骤二 · P0193 轨压传感器电压信号高于上限<span class="d">信号过高类详解模板，其余故障码同法展开</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>轨压传感器信号电压过高</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>动力不足、限速（按替代轨压进入跛行模式）；</li>
+  <li>对于共轨管不带限压阀的系统，还可能导致无法起动。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 320" width="100%" style="min-width:760px">
+  <!-- 传感器（左） -->
+  <rect x="60" y="60" width="180" height="200" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="150" y="45" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">轨压传感器</text>
+  <text x="150" y="150" text-anchor="middle" font-size="13" fill="#5a6b82">P / u</text>
+  <g font-size="13" font-weight="bold" fill="#c8501e">
+    <circle cx="240" cy="100" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="105" text-anchor="end">1</text>
+    <circle cx="240" cy="160" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="165" text-anchor="end">2</text>
+    <circle cx="240" cy="220" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="225" text-anchor="end">3</text>
+  </g>
+  <!-- 插头示意 -->
+  <rect x="80" y="270" width="140" height="38" rx="8" fill="#2f2f2f"/>
+  <rect x="95" y="278" width="110" height="22" rx="5" fill="#c8501e"/>
+  <g font-size="11" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="115" y="294">1</text><text x="150" y="294">2</text><text x="185" y="294">3</text>
+  </g>
+  <text x="150" y="318" text-anchor="middle" font-size="10" fill="#5a6b82">传感器插头（3脚）</text>
+  <!-- 三条水平线 -->
+  <line x1="240" y1="100" x2="740" y2="100" stroke="#12263f" stroke-width="3"/>
+  <line x1="240" y1="160" x2="740" y2="160" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="240" y1="220" x2="740" y2="220" stroke="#c8501e" stroke-width="3"/>
+  <g font-size="13" text-anchor="middle" font-weight="bold">
+    <text x="490" y="90" fill="#12263f">地线</text>
+    <text x="490" y="150" fill="#1a5fa8">信号线</text>
+    <text x="490" y="210" fill="#c8501e">电源线（5V供电模块1）</text>
+  </g>
+  <!-- ECU（右） -->
+  <rect x="740" y="60" width="220" height="200" rx="8" fill="#12263f"/>
+  <text x="850" y="45" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">ECU</text>
+  <g font-size="12.5" fill="#fff">
+    <circle cx="740" cy="100" r="5" fill="#ffb46a"/>
+    <text x="758" y="105">A63 <tspan fill="#9fc3e8">(0V)</tspan></text>
+    <circle cx="740" cy="160" r="5" fill="#ffb46a"/>
+    <text x="758" y="165">A62 <tspan fill="#9fc3e8">(5V)</tspan></text>
+    <circle cx="740" cy="220" r="5" fill="#ffb46a"/>
+    <text x="758" y="225">A42 <tspan fill="#9fc3e8">(5V)</tspan></text>
+  </g>
+  <text x="850" y="245" text-anchor="middle" font-size="10.5" fill="#9fc3e8">括号内为拔插头开路电压</text>
+</svg>
+<div class="cap">图2-1 · P0193 相关电路图（pin1地 / pin2信号 / pin3电源）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<!-- 原因1 -->
+<div class="cause">
+<h3><span class="no">原因 1</span>轨压传感器线路存在虚接、开路</h3>
+<ol class="st">
+<li>拔下传感器插头，目测插头端子有无退针、进水、氧化、烧蚀，线束根部有无折断。</li>
+<li>钥匙上电，依次测量插头（线束端）<strong>1、2、3 脚开路电压，正常分别为 0V、5V、5V</strong>（见下图）。若电压异常 → 检查该线束或结合电路图飞线；若 5V 供电线检查后电压还是异常 → 回到<strong>步骤一</strong>按供电模块故障排查。</li>
+<li>再测量插头<strong>供电脚（3脚）与地线脚（1脚）之间的电压，正常为 5V</strong>，确认供电回路完整。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <!-- 标准值表（左上） -->
+  <rect x="30" y="25" width="300" height="160" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="82">pin1（地线）= 0V</text>
+    <text x="60" y="112">pin2（信号）= 5V</text>
+    <text x="60" y="142">pin3（电源）= 5V</text>
+    <text x="60" y="170" fill="#1a5fa8">pin3 与 pin1 之间 = 5V</text>
+  </g>
+  <!-- 表笔接法说明（右上空白区） -->
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　1 / 2 / 3 脚</text>
+  <!-- CRS万用表 -->
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="88" text-anchor="middle" font-size="26" font-weight="bold" fill="#9df07a">5V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <!-- 黑表笔：插孔正下方垂直搭铁（统一样式） -->
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <!-- 红表笔：垂直下行 → 水平右行 → 垂直点触插头（横平竖直，无交叉） -->
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="778" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="778" y1="314" x2="778" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="778" y1="326" x2="778" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <!-- 传感器插头（线束端） -->
+  <rect x="620" y="330" width="210" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="638" y="342" width="174" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="672" y="365">1</text><text x="725" y="365">2</text><text x="778" y="365">3</text>
+  </g>
+  <text x="725" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">轨压传感器插头（线束端）</text>
+  <!-- 判定栏 -->
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：电压全部正常 → 线路无开路，转原因2</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">某脚异常 → 查该线束或飞线；5V异常 → 回步骤一查供电模块</text>
+</svg>
+<div class="cap">图2-2 · 开路电压测量示意图（拔插头，Key-ON，红表笔依次点测1/2/3脚）</div>
+</div>
+</div>
+
+<!-- 原因2 -->
+<div class="cause">
+<h3><span class="no">原因 2</span>轨压传感器信号线和电源线短路</h3>
+<ol class="st">
+<li>拔下传感器插头，用导线短接插头线束端的 <strong>1脚（地线）与 2脚（信号线）</strong>，钥匙上电重新读取故障码。</li>
+<li>若只报出<strong>轨压信号电压低</strong>故障 → 说明信号线正常，转原因3。</li>
+<li>若同时多报了<strong>供电模块故障</strong> → 判断为信号线对 5V 供电线短路，检查该信号线线束（重点查与电源线并行走线的磨破点）或结合电路图飞线。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:700px">
+  <!-- 插头 -->
+  <rect x="380" y="120" width="240" height="70" rx="12" fill="#2f2f2f"/>
+  <rect x="400" y="134" width="200" height="42" rx="7" fill="#c8501e"/>
+  <g font-size="16" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="445" y="163">1</text><text x="500" y="163">2</text><text x="555" y="163">3</text>
+  </g>
+  <text x="500" y="215" text-anchor="middle" font-size="11" fill="#5a6b82">轨压传感器插头（线束端）</text>
+  <!-- 短接线：直线构成的倒U形 -->
+  <line x1="445" y1="134" x2="445" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="445" y1="70" x2="500" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="500" y1="70" x2="500" y2="134" stroke="#b3261e" stroke-width="4"/>
+  <circle cx="445" cy="134" r="5" fill="#b3261e"/>
+  <circle cx="500" cy="134" r="5" fill="#b3261e"/>
+  <text x="530" y="66" font-size="13" fill="#b3261e" font-weight="bold">短接线（1脚 ↔ 2脚）</text>
+  <!-- 判定栏 -->
+  <rect x="60" y="240" width="880" height="48" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="75" y="260" font-size="12.5" fill="#1e7d43" font-weight="bold">只报“信号电压低” → 信号线正常，转原因3查传感器</text>
+  <text x="75" y="279" font-size="12.5" fill="#b3261e" font-weight="bold">多报“供电模块故障” → 信号线对5V供电线短路，查线束或飞线</text>
+</svg>
+<div class="cap">图2-3 · 地线与信号线短接示意图</div>
+</div>
+</div>
+
+<!-- 原因3 -->
+<div class="cause">
+<h3><span class="no">原因 3</span>轨压传感器失效</h3>
+<ol class="st">
+<li>在确定 5V 供电和地线正常的情况下（原因1已排除），在传感器<strong>插头后端将信号线端子退出（或断开信号线接点）</strong>，使传感器端信号线与ECU线束分离（操作可恢复，不损伤线束）。</li>
+<li>连接好轨压传感器，钥匙上电，测量<strong>传感器端信号线对地电压，正常应在 0.5V 左右</strong>。</li>
+<li>若电压明显偏离 0.5V（如接近 5V）→ 说明传感器内部损坏，<strong>更换轨压传感器</strong>。</li>
+<li>若现场条件不允许分线检测，可直接更换轨压传感器测试验证。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 440" width="100%" style="min-width:760px">
+  <!-- 传感器（左） -->
+  <rect x="50" y="95" width="170" height="180" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="135" y="85" text-anchor="middle" font-size="13" font-weight="bold" fill="#c8501e">轨压传感器</text>
+  <g font-size="13" font-weight="bold" fill="#c8501e">
+    <circle cx="220" cy="135" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="205" y="140" text-anchor="end">1</text>
+    <circle cx="220" cy="185" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="205" y="190" text-anchor="end">2</text>
+    <circle cx="220" cy="235" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="205" y="240" text-anchor="end">3</text>
+  </g>
+  <!-- 三条线：信号线中段分离 -->
+  <line x1="220" y1="135" x2="480" y2="135" stroke="#12263f" stroke-width="3"/>
+  <line x1="220" y1="185" x2="358" y2="185" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="412" y1="185" x2="480" y2="185" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="220" y1="235" x2="480" y2="235" stroke="#c8501e" stroke-width="3"/>
+  <circle cx="358" cy="185" r="5" fill="#1a5fa8"/>
+  <circle cx="412" cy="185" r="5" fill="#fff" stroke="#1a5fa8" stroke-width="2.5"/>
+  <text x="360" y="166" text-anchor="middle" font-size="10.5" fill="#b3261e" font-weight="bold">信号线分离点（退出端子，可恢复）</text>
+  <text x="272" y="212" font-size="10.5" fill="#1a5fa8">传感器端信号线</text>
+  <!-- 插头 -->
+  <rect x="480" y="110" width="26" height="150" fill="#d5dde8"/>
+  <text x="493" y="103" text-anchor="middle" font-size="11" fill="#5a6b82">插头</text>
+  <text x="520" y="140" font-size="11" fill="#12263f">1脚 地线</text>
+  <text x="520" y="190" font-size="11" fill="#1a5fa8">2脚 信号（已分离）</text>
+  <text x="520" y="240" font-size="11" fill="#c8501e">3脚 电源5V</text>
+  <!-- CRS万用表（显示0.5V） -->
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="85" text-anchor="middle" font-size="24" font-weight="bold" fill="#9df07a">0.5V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <!-- 红表笔：垂直下行 → 水平左行 → 垂直上探至信号线分离点（横平竖直） -->
+  <line x1="808" y1="287" x2="808" y2="355" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="355" x2="358" y2="355" stroke="#b3261e" stroke-width="3"/>
+  <line x1="358" y1="355" x2="358" y2="248" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="358" y1="248" x2="358" y2="192" stroke="#d9d9d9" stroke-width="3"/>
+  <!-- 黑表笔：插孔正下方垂直搭铁 -->
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="742" y2="318" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="742" y1="318" x2="742" y2="326" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="742" y1="326" x2="742" y2="332" stroke="#12263f" stroke-width="3"/>
+  <line x1="720" y1="332" x2="764" y2="332" stroke="#12263f" stroke-width="3"/>
+  <line x1="728" y1="340" x2="756" y2="340" stroke="#12263f" stroke-width="3"/>
+  <line x1="736" y1="348" x2="748" y2="348" stroke="#12263f" stroke-width="3"/>
+  <text x="700" y="336" text-anchor="end" font-size="11" fill="#12263f">黑表笔搭铁</text>
+  <!-- 判定栏 -->
+  <rect x="50" y="400" width="620" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="62" y="421" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：输出 ≈0.5V 正常；明显偏离（如≈5V）→ 传感器损坏，更换</text>
+</svg>
+<div class="cap">图2-4 · 传感器端信号线输出电压测量图（分线检测法，操作可恢复）</div>
+</div>
+</div>
+
+<!-- 原因4 -->
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）问题</h3>
+<ol class="st">
+<li>检查电脑板有无损坏或数据失效（外观烧蚀、进水痕迹，读取版本信息）。</li>
+<li>以上原因1~3全部检查正常后，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项，禁止未排除线束和传感器就先换板。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤三 · P0242 ============ -->
+<section>
+<h2>步骤三 · P0242 增压压力传感器电压信号高于上限<span class="d">5V供电模块1 · 上拉型压力传感器</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>增压（进气）压力传感器信号电压过高</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>增压压力闭环控制失效，动力不足、加速无力；</li>
+  <li>可能冒黑烟，严重时发动机限扭。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 320" width="100%" style="min-width:760px">
+  <rect x="60" y="60" width="180" height="200" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="150" y="45" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">增压压力传感器</text>
+  <text x="150" y="150" text-anchor="middle" font-size="13" fill="#5a6b82">P / u</text>
+  <g font-size="13" font-weight="bold" fill="#c8501e">
+    <circle cx="240" cy="100" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="105" text-anchor="end">1</text>
+    <circle cx="240" cy="160" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="165" text-anchor="end">4</text>
+    <circle cx="240" cy="220" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="225" text-anchor="end">3</text>
+  </g>
+  <rect x="80" y="270" width="140" height="38" rx="8" fill="#2f2f2f"/>
+  <rect x="95" y="278" width="110" height="22" rx="5" fill="#c8501e"/>
+  <g font-size="11" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="115" y="294">1</text><text x="150" y="294">3</text><text x="185" y="294">4</text>
+  </g>
+  <text x="150" y="318" text-anchor="middle" font-size="10" fill="#5a6b82">传感器插头（pin2为空脚）</text>
+  <line x1="240" y1="100" x2="740" y2="100" stroke="#12263f" stroke-width="3"/>
+  <line x1="240" y1="160" x2="740" y2="160" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="240" y1="220" x2="740" y2="220" stroke="#c8501e" stroke-width="3"/>
+  <g font-size="13" text-anchor="middle" font-weight="bold">
+    <text x="490" y="90" fill="#12263f">地线</text>
+    <text x="490" y="150" fill="#1a5fa8">信号线</text>
+    <text x="490" y="210" fill="#c8501e">电源线（5V供电模块1）</text>
+  </g>
+  <rect x="740" y="60" width="220" height="200" rx="8" fill="#12263f"/>
+  <text x="850" y="45" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">ECU</text>
+  <g font-size="12.5" fill="#fff">
+    <circle cx="740" cy="100" r="5" fill="#ffb46a"/>
+    <text x="758" y="105">A82 <tspan fill="#9fc3e8">(0V)</tspan></text>
+    <circle cx="740" cy="160" r="5" fill="#ffb46a"/>
+    <text x="758" y="165">A60 <tspan fill="#9fc3e8">(5.7V)</tspan></text>
+    <circle cx="740" cy="220" r="5" fill="#ffb46a"/>
+    <text x="758" y="225">A41 <tspan fill="#9fc3e8">(5V)</tspan></text>
+  </g>
+  <text x="850" y="245" text-anchor="middle" font-size="10.5" fill="#9fc3e8">括号内为拔插头开路电压</text>
+</svg>
+<div class="cap">图3-1 · P0242 相关电路图（pin1地 / pin4信号 / pin3电源）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>增压压力传感器线路存在虚接、开路</h3>
+<ol class="st">
+<li>拔下传感器插头，目测插头端子有无退针、进水、氧化、烧蚀，线束根部有无折断。</li>
+<li>钥匙上电，依次测量插头（线束端）<strong>1、3、4 脚开路电压，正常分别为 0V、5V、5.7V</strong>（见下图，5.7V为正常上拉特征，勿误判）。若电压异常 → 检查该线束或结合电路图飞线；若 5V 供电异常 → 回到<strong>步骤一</strong>按供电模块故障排查。</li>
+<li>再测量插头<strong>供电脚（3脚）与地线脚（1脚）之间的电压，正常为 5V</strong>，确认供电回路完整。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="160" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="82">pin1（地线）= 0V</text>
+    <text x="60" y="112">pin3（电源）= 5V</text>
+    <text x="60" y="142">pin4（信号）= 5.7V</text>
+    <text x="60" y="170" fill="#1a5fa8">pin3 与 pin1 之间 = 5V</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　1 / 3 / 4 脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="23" font-weight="bold" fill="#9df07a">5.7V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="795" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="795" y1="314" x2="795" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="795" y1="326" x2="795" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="620" y="330" width="210" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="638" y="342" width="174" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="655" y="365">1</text><text x="725" y="365">3</text><text x="795" y="365">4</text>
+  </g>
+  <text x="725" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">增压压力传感器插头（线束端，图示测4脚）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：电压全部正常 → 线路无开路，转原因2</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">某脚异常 → 查该线束或飞线；5V异常 → 回步骤一查供电模块</text>
+</svg>
+<div class="cap">图3-2 · 开路电压测量示意图（拔插头，Key-ON，红表笔依次点测1/3/4脚）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>增压压力传感器信号线和电源线短路</h3>
+<ol class="st">
+<li>拔下传感器插头，用导线短接插头线束端的 <strong>1脚（地线）与 4脚（信号线）</strong>，钥匙上电重新读取故障码。</li>
+<li>若只报出<strong>增压压力信号电压低</strong>故障 → 说明信号线正常，转原因3。</li>
+<li>若同时多报了<strong>供电模块故障</strong> → 判断为信号线对 5V 供电线短路，检查该信号线线束（重点查与电源线并行走线的磨破点）或结合电路图飞线。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:700px">
+  <rect x="380" y="120" width="240" height="70" rx="12" fill="#2f2f2f"/>
+  <rect x="400" y="134" width="200" height="42" rx="7" fill="#c8501e"/>
+  <g font-size="16" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="420" y="163">1</text><text x="500" y="163">3</text><text x="580" y="163">4</text>
+  </g>
+  <text x="500" y="215" text-anchor="middle" font-size="11" fill="#5a6b82">增压压力传感器插头（线束端）</text>
+  <line x1="420" y1="134" x2="420" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="420" y1="70" x2="580" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="580" y1="70" x2="580" y2="134" stroke="#b3261e" stroke-width="4"/>
+  <circle cx="420" cy="134" r="5" fill="#b3261e"/>
+  <circle cx="580" cy="134" r="5" fill="#b3261e"/>
+  <text x="605" y="66" font-size="13" fill="#b3261e" font-weight="bold">短接线（4脚 ↔ 1脚）</text>
+  <rect x="60" y="240" width="880" height="48" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="75" y="260" font-size="12.5" fill="#1e7d43" font-weight="bold">只报“信号电压低” → 信号线正常，转原因3查传感器</text>
+  <text x="75" y="279" font-size="12.5" fill="#b3261e" font-weight="bold">多报“供电模块故障” → 信号线对5V供电线短路，查线束或飞线</text>
+</svg>
+<div class="cap">图3-3 · 地线与信号线短接示意图</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>增压压力传感器失效</h3>
+<ol class="st">
+<li>在确定 5V 供电和地线正常的情况下（原因1已排除），在传感器<strong>插头后端将信号线（4脚）端子退出（或断开信号线接点）</strong>，使传感器端信号线与ECU线束分离（操作可恢复，不损伤线束）。</li>
+<li>连接好传感器，钥匙上电，测量<strong>传感器端信号线对地电压，正常应在 0.5V 左右</strong>（同类型压力传感器基础输出）。</li>
+<li>若电压明显偏离 0.5V（如接近 5V）→ 说明传感器内部损坏，<strong>更换增压压力传感器</strong>。</li>
+<li>若现场条件不允许分线检测，可直接更换增压压力传感器测试验证。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 440" width="100%" style="min-width:760px">
+  <rect x="50" y="95" width="170" height="180" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="135" y="85" text-anchor="middle" font-size="13" font-weight="bold" fill="#c8501e">增压压力传感器</text>
+  <g font-size="13" font-weight="bold" fill="#c8501e">
+    <circle cx="220" cy="135" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="205" y="140" text-anchor="end">1</text>
+    <circle cx="220" cy="185" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="205" y="190" text-anchor="end">4</text>
+    <circle cx="220" cy="235" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="205" y="240" text-anchor="end">3</text>
+  </g>
+  <line x1="220" y1="135" x2="480" y2="135" stroke="#12263f" stroke-width="3"/>
+  <line x1="220" y1="185" x2="358" y2="185" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="412" y1="185" x2="480" y2="185" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="220" y1="235" x2="480" y2="235" stroke="#c8501e" stroke-width="3"/>
+  <circle cx="358" cy="185" r="5" fill="#1a5fa8"/>
+  <circle cx="412" cy="185" r="5" fill="#fff" stroke="#1a5fa8" stroke-width="2.5"/>
+  <text x="360" y="166" text-anchor="middle" font-size="10.5" fill="#b3261e" font-weight="bold">信号线分离点（退出端子，可恢复）</text>
+  <text x="272" y="212" font-size="10.5" fill="#1a5fa8">传感器端信号线</text>
+  <rect x="480" y="110" width="26" height="150" fill="#d5dde8"/>
+  <text x="493" y="103" text-anchor="middle" font-size="11" fill="#5a6b82">插头</text>
+  <text x="520" y="140" font-size="11" fill="#12263f">1脚 地线</text>
+  <text x="520" y="190" font-size="11" fill="#1a5fa8">4脚 信号（已分离）</text>
+  <text x="520" y="240" font-size="11" fill="#c8501e">3脚 电源5V</text>
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="85" text-anchor="middle" font-size="24" font-weight="bold" fill="#9df07a">0.5V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电流</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="808" y1="287" x2="808" y2="355" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="355" x2="358" y2="355" stroke="#b3261e" stroke-width="3"/>
+  <line x1="358" y1="355" x2="358" y2="248" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="358" y1="248" x2="358" y2="192" stroke="#d9d9d9" stroke-width="3"/>
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="742" y2="318" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="742" y1="318" x2="742" y2="326" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="742" y1="326" x2="742" y2="332" stroke="#12263f" stroke-width="3"/>
+  <line x1="720" y1="332" x2="764" y2="332" stroke="#12263f" stroke-width="3"/>
+  <line x1="728" y1="340" x2="756" y2="340" stroke="#12263f" stroke-width="3"/>
+  <line x1="736" y1="348" x2="748" y2="348" stroke="#12263f" stroke-width="3"/>
+  <text x="700" y="336" text-anchor="end" font-size="11" fill="#12263f">黑表笔搭铁</text>
+  <rect x="50" y="400" width="620" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="62" y="421" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：输出 ≈0.5V 正常；明显偏离（如≈5V）→ 传感器损坏，更换</text>
+</svg>
+<div class="cap">图3-4 · 传感器端信号线输出电压测量图（分线检测法，操作可恢复）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）问题</h3>
+<ol class="st">
+<li>检查电脑板有无损坏或数据失效（外观烧蚀、进水痕迹，读取版本信息）。</li>
+<li>以上原因1~3全部检查正常后，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项，禁止未排除线束和传感器就先换板。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤四 · P0100 ============ -->
+<section>
+<h2>步骤四 · P0100 空气流量计(HFM)电压信号过高<span class="d">5V供电模块2 · 流量信号为下拉型（勿误判）</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>空气流量计流量信号电压过高</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>进气量计算失准，怠速不稳、动力下降；</li>
+  <li>油耗升高，可能冒黑烟。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 380" width="100%" style="min-width:760px">
+  <rect x="60" y="50" width="180" height="250" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="150" y="38" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">空气流量计 HFM</text>
+  <text x="150" y="170" text-anchor="middle" font-size="13" fill="#5a6b82">HFM</text>
+  <g font-size="13" font-weight="bold" fill="#c8501e">
+    <circle cx="240" cy="85" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="90" text-anchor="end">1</text>
+    <circle cx="240" cy="145" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="150" text-anchor="end">2</text>
+    <circle cx="240" cy="205" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="210" text-anchor="end">3</text>
+    <circle cx="240" cy="265" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="270" text-anchor="end">4</text>
+  </g>
+  <rect x="70" y="315" width="160" height="38" rx="8" fill="#2f2f2f"/>
+  <rect x="85" y="323" width="130" height="22" rx="5" fill="#c8501e"/>
+  <g font-size="11" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="101" y="339">1</text><text x="134" y="339">2</text><text x="167" y="339">3</text><text x="200" y="339">4</text>
+  </g>
+  <text x="150" y="368" text-anchor="middle" font-size="10" fill="#5a6b82">传感器插头（4脚）</text>
+  <line x1="240" y1="85" x2="740" y2="85" stroke="#1e7d43" stroke-width="3"/>
+  <line x1="240" y1="145" x2="740" y2="145" stroke="#12263f" stroke-width="3"/>
+  <line x1="240" y1="205" x2="740" y2="205" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="240" y1="265" x2="740" y2="265" stroke="#c8501e" stroke-width="3"/>
+  <g font-size="13" text-anchor="middle" font-weight="bold">
+    <text x="490" y="75" fill="#1e7d43">温度信号</text>
+    <text x="490" y="135" fill="#12263f">地线</text>
+    <text x="490" y="195" fill="#1a5fa8">流量信号（下拉型）</text>
+    <text x="490" y="255" fill="#c8501e">电源线（5V供电模块2）</text>
+  </g>
+  <rect x="740" y="50" width="220" height="250" rx="8" fill="#12263f"/>
+  <text x="850" y="38" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">ECU</text>
+  <g font-size="12.5" fill="#fff">
+    <circle cx="740" cy="85" r="5" fill="#ffb46a"/>
+    <text x="758" y="90">K76 <tspan fill="#9fc3e8">(5V)</tspan></text>
+    <circle cx="740" cy="145" r="5" fill="#ffb46a"/>
+    <text x="758" y="150">K87 <tspan fill="#9fc3e8">(0V)</tspan></text>
+    <circle cx="740" cy="205" r="5" fill="#ffb46a"/>
+    <text x="758" y="210">K86 <tspan fill="#9fc3e8">(0V/5V)</tspan></text>
+    <circle cx="740" cy="265" r="5" fill="#ffb46a"/>
+    <text x="758" y="270">K59 <tspan fill="#9fc3e8">(5V)</tspan></text>
+  </g>
+  <text x="850" y="290" text-anchor="middle" font-size="10.5" fill="#9fc3e8">K86：不起动0V / 起动5V</text>
+</svg>
+<div class="cap">图4-1 · P0100 相关电路图（pin1温度信号 / pin2地 / pin3流量信号 / pin4电源）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>空气流量计线路存在虚接、开路</h3>
+<ol class="st">
+<li>拔下传感器插头，目测插头端子有无退针、进水、氧化，线束根部有无折断。</li>
+<li>钥匙上电，测量插头（线束端）开路电压：<strong>pin2=0V、pin4=5V、pin1=5V</strong>；<strong>pin3流量信号为下拉型：不起动时0V且对地导通、起动时5V，属正常特征，勿误判</strong>（见下图）。</li>
+<li>再测<strong>pin4 与 pin2 之间电压 = 5V</strong>，确认供电回路完整；若5V异常 → 查5V供电模块2（K59）链路；其余异常 → 查对应线束或飞线。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="310" height="180" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="185" y="45" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="58" y="75">pin2（地线）= 0V</text>
+    <text x="58" y="103">pin4（电源）= 5V</text>
+    <text x="58" y="131">pin1（温度信号）= 5V</text>
+    <text x="58" y="159" fill="#b3261e">pin3（流量信号）= 不起动0V / 起动5V</text>
+    <text x="58" y="185" fill="#1a5fa8">pin4 与 pin2 之间 = 5V</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　1~4 脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="88" text-anchor="middle" font-size="26" font-weight="bold" fill="#9df07a">5V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="845" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="845" y1="314" x2="845" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="845" y1="326" x2="845" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="600" y="330" width="270" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="618" y="342" width="234" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="650" y="365">1</text><text x="715" y="365">2</text><text x="780" y="365">3</text><text x="845" y="365">4</text>
+  </g>
+  <text x="735" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">空气流量计插头（线束端，图示测4脚）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：电压全部正常 → 线路无开路，转原因2</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">5V异常 → 查5V供电模块2（K59）链路；其余异常 → 查该线束或飞线</text>
+</svg>
+<div class="cap">图4-2 · 开路电压测量示意图（拔插头，Key-ON，红表笔依次点测1~4脚）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>空气流量计流量信号线和电源线短路</h3>
+<ol class="st">
+<li>拔下传感器插头，用导线短接插头线束端的 <strong>3脚（流量信号）与 2脚（地线）</strong>，钥匙上电（或起动）重新读取故障码。</li>
+<li>若故障翻转为<strong>流量信号电压低</strong> → 说明线束与ECU判定功能正常，转原因3。</li>
+<li>若仍维持<strong>电压过高</strong> → 判断为流量信号线对 5V 短路（重点查与电源线并行走线的磨破点）或 ECU 内部故障。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:700px">
+  <rect x="360" y="120" width="280" height="70" rx="12" fill="#2f2f2f"/>
+  <rect x="380" y="134" width="240" height="42" rx="7" fill="#c8501e"/>
+  <g font-size="16" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="410" y="163">1</text><text x="470" y="163">2</text><text x="530" y="163">3</text><text x="590" y="163">4</text>
+  </g>
+  <text x="500" y="215" text-anchor="middle" font-size="11" fill="#5a6b82">空气流量计插头（线束端）</text>
+  <line x1="470" y1="134" x2="470" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="470" y1="70" x2="530" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="530" y1="70" x2="530" y2="134" stroke="#b3261e" stroke-width="4"/>
+  <circle cx="470" cy="134" r="5" fill="#b3261e"/>
+  <circle cx="530" cy="134" r="5" fill="#b3261e"/>
+  <text x="558" y="66" font-size="13" fill="#b3261e" font-weight="bold">短接线（3脚 ↔ 2脚）</text>
+  <rect x="60" y="240" width="880" height="48" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="75" y="260" font-size="12.5" fill="#1e7d43" font-weight="bold">翻转为“流量信号电压低” → 线束与ECU正常，转原因3换流量计</text>
+  <text x="75" y="279" font-size="12.5" fill="#b3261e" font-weight="bold">维持“电压过高” → 流量信号线对5V短路，查线束磨破点或ECU</text>
+</svg>
+<div class="cap">图4-3 · 流量信号与地线短接示意图</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>空气流量计失效</h3>
+<ol class="st">
+<li>HFM 为热膜式传感器，无法通过分线测基础输出判断；在<strong>供电、接地、线束均正常</strong>（原因1、2已排除）的前提下，直接<strong>更换空气流量计</strong>测试验证。</li>
+<li>更换后清码试车，故障码不再复现 → 确认传感器损坏。</li>
+</ol>
+<div class="judge"><b>判定：</b>换件验证是 HFM 失效的最终确认手段；注意选用同型号原厂件，安装时检查滤芯与进气管路有无脏污（脏污是HFM损坏的常见诱因）。</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）问题</h3>
+<ol class="st">
+<li>检查电脑板有无损坏或数据失效（外观烧蚀、进水痕迹，读取版本信息）。</li>
+<li>以上原因1~3全部检查正常后，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项，禁止未排除线束和传感器就先换板。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤五 · P0435 ============ -->
+<section>
+<h2>步骤五 · P0435 SCR催化器上游温度传感器信号电压过高<span class="d">上拉型排温传感器 · 200℃≈350Ω</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>SCR进口排温传感器信号电压过高</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>SCR温度监控失效，OBD故障灯亮；</li>
+  <li>后处理系统可能降级，发动机限扭。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:760px">
+  <rect x="60" y="55" width="180" height="160" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="150" y="42" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">SCR上游排温传感器</text>
+  <text x="150" y="140" text-anchor="middle" font-size="13" fill="#5a6b82">T</text>
+  <g font-size="13" font-weight="bold" fill="#c8501e">
+    <circle cx="240" cy="95" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="100" text-anchor="end">1</text>
+    <circle cx="240" cy="175" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="222" y="180" text-anchor="end">2</text>
+  </g>
+  <rect x="80" y="230" width="140" height="38" rx="8" fill="#2f2f2f"/>
+  <rect x="95" y="238" width="110" height="22" rx="5" fill="#c8501e"/>
+  <g font-size="11" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="122" y="254">1</text><text x="178" y="254">2</text>
+  </g>
+  <text x="150" y="282" text-anchor="middle" font-size="10" fill="#5a6b82">传感器插头（2脚）</text>
+  <line x1="240" y1="95" x2="740" y2="95" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="240" y1="175" x2="740" y2="175" stroke="#12263f" stroke-width="3"/>
+  <g font-size="13" text-anchor="middle" font-weight="bold">
+    <text x="490" y="85" fill="#1a5fa8">信号线（上拉型）</text>
+    <text x="490" y="165" fill="#12263f">地线</text>
+  </g>
+  <rect x="740" y="55" width="220" height="160" rx="8" fill="#12263f"/>
+  <text x="850" y="42" text-anchor="middle" font-size="14" font-weight="bold" fill="#c8501e">ECU</text>
+  <g font-size="12.5" fill="#fff">
+    <circle cx="740" cy="95" r="5" fill="#ffb46a"/>
+    <text x="758" y="100">A36 <tspan fill="#9fc3e8">(5V)</tspan></text>
+    <circle cx="740" cy="175" r="5" fill="#ffb46a"/>
+    <text x="758" y="180">K26 <tspan fill="#9fc3e8">(0V)</tspan></text>
+  </g>
+  <text x="850" y="200" text-anchor="middle" font-size="10.5" fill="#9fc3e8">200℃ ≈ 350Ω</text>
+</svg>
+<div class="cap">图5-1 · P0435 相关电路图（pin1信号 / pin2地）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>排温传感器线路存在虚接、开路</h3>
+<ol class="st">
+<li>拔下传感器插头，目测端子有无退针、烧蚀，<strong>重点检查线束根部有无折断</strong>（排温传感器工作环境恶劣，断线高发）。</li>
+<li>钥匙上电，测量插头（线束端）开路电压：<strong>pin1（信号）= 5V、pin2（地）= 0V</strong>（见下图）。异常 → 检查该线束或结合电路图飞线。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="130" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="85">pin1（信号）= 5V</text>
+    <text x="60" y="118">pin2（地线）= 0V</text>
+    <text x="60" y="146" fill="#1a5fa8">断电测本体电阻见原因3</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　1 / 2 脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="88" text-anchor="middle" font-size="26" font-weight="bold" fill="#9df07a">5V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="700" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="700" y1="314" x2="700" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="700" y1="326" x2="700" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="640" y="330" width="180" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="658" y="342" width="144" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="700" y="365">1</text><text x="760" y="365">2</text>
+  </g>
+  <text x="730" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">排温传感器插头（线束端，图示测1脚）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：电压全部正常 → 线路无开路，转原因2</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">某脚异常 → 查该线束（重点查线束根部折断点）或飞线</text>
+</svg>
+<div class="cap">图5-2 · 开路电压测量示意图（拔插头，Key-ON，红表笔依次点测1/2脚）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>排温传感器信号线和电源线短路</h3>
+<ol class="st">
+<li>拔下传感器插头，用导线短接插头线束端的 <strong>1脚（信号）与 2脚（地线）</strong>，钥匙上电重新读取故障码。</li>
+<li>若故障翻转为<strong>排温信号电压低</strong> → 说明线束与ECU正常，转原因3。</li>
+<li>若仍维持<strong>电压过高</strong> → 判断为信号线对电源短路（查线束磨破点）或 ECU 内部故障。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:700px">
+  <rect x="400" y="120" width="200" height="70" rx="12" fill="#2f2f2f"/>
+  <rect x="420" y="134" width="160" height="42" rx="7" fill="#c8501e"/>
+  <g font-size="16" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="460" y="163">1</text><text x="540" y="163">2</text>
+  </g>
+  <text x="500" y="215" text-anchor="middle" font-size="11" fill="#5a6b82">排温传感器插头（线束端）</text>
+  <line x1="460" y1="134" x2="460" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="460" y1="70" x2="540" y2="70" stroke="#b3261e" stroke-width="4"/>
+  <line x1="540" y1="70" x2="540" y2="134" stroke="#b3261e" stroke-width="4"/>
+  <circle cx="460" cy="134" r="5" fill="#b3261e"/>
+  <circle cx="540" cy="134" r="5" fill="#b3261e"/>
+  <text x="565" y="66" font-size="13" fill="#b3261e" font-weight="bold">短接线（1脚 ↔ 2脚）</text>
+  <rect x="60" y="240" width="880" height="48" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="75" y="260" font-size="12.5" fill="#1e7d43" font-weight="bold">翻转为“排温信号电压低” → 线束与ECU正常，转原因3测传感器</text>
+  <text x="75" y="279" font-size="12.5" fill="#b3261e" font-weight="bold">维持“电压过高” → 信号线对电源短路，查线束或ECU</text>
+</svg>
+<div class="cap">图5-3 · 信号与地线短接示意图</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>排温传感器失效</h3>
+<ol class="st">
+<li><strong>断电（Key-OFF）</strong>，拔下插头，测量<strong>传感器本体 pin1–pin2 电阻</strong>：参考 <strong>200℃ ≈ 350Ω</strong>，常温下阻值更大（负温度特性）。</li>
+<li>电阻为 <strong>∞（无穷大）</strong> → 传感器内部断线，<strong>直接更换排温传感器</strong>。</li>
+<li>阻值符合温度特性 → 转原因4。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="340" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="200" y="46" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">断电（Key-OFF）测本体电阻</text>
+  <text x="200" y="72" text-anchor="middle" font-size="12" fill="#12263f">标准：200℃ ≈ 350Ω · ∞=内部断线</text>
+  <text x="200" y="90" text-anchor="middle" font-size="10.5" fill="#5a6b82">测传感器侧，常温阻值大于350Ω</text>
+  <!-- 传感器本体（引脚在顶边） -->
+  <rect x="90" y="330" width="240" height="70" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="210" y="372" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">排温传感器本体</text>
+  <g font-size="12" font-weight="bold" fill="#c8501e">
+    <circle cx="150" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="150" y="318" text-anchor="middle">1</text>
+    <circle cx="270" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="270" y="318" text-anchor="middle">2</text>
+  </g>
+  <!-- CRS万用表（显示350Ω） -->
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="22" font-weight="bold" fill="#9df07a">350Ω</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#c9a227"/><text x="103" y="153" fill="#fff">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <!-- 红表笔：下行→水平左行→下探 pin2（横平竖直，无交叉） -->
+  <line x1="808" y1="287" x2="808" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="320" x2="270" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="270" y1="320" x2="270" y2="324" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="270" y1="324" x2="270" y2="330" stroke="#d9d9d9" stroke-width="3"/>
+  <!-- 黑表笔：下行→水平左行→下探 pin1 -->
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="150" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="150" y1="300" x2="150" y2="322" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="150" y1="322" x2="150" y2="330" stroke="#9aa0a6" stroke-width="3"/>
+  <text x="330" y="312" font-size="11" fill="#b3261e">红表笔→pin2</text>
+  <text x="175" y="292" font-size="11" fill="#12263f">黑表笔→pin1</text>
+  <rect x="30" y="390" width="940" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="411" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：R=∞ → 内部断线，直接更换；阻值符合温度特性 → 转原因4</text>
+</svg>
+<div class="cap">图5-4 · 排温传感器本体电阻测量图（断电，电阻档）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）问题</h3>
+<ol class="st">
+<li>检查电脑板有无损坏或数据失效（外观烧蚀、进水痕迹，读取版本信息）。</li>
+<li>以上原因1~3全部检查正常后，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项，禁止未排除线束和传感器就先换板。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤六 · P0251 ============ -->
+<section>
+<h2>步骤六 · P0251 高压油泵油量计量单元(MeUn)驱动电路开路<span class="d">A07高端12.38V / A06低端3.49V · 线圈3.4Ω</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>计量单元（MeUn）驱动电路开路</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>无法起动或起动困难，轨压无法建立；</li>
+  <li>行驶中可能熄火。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:780px">
+  <rect x="30" y="50" width="180" height="150" rx="8" fill="#12263f"/>
+  <text x="120" y="40" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">ECU 驱动级</text>
+  <g font-size="12" fill="#fff">
+    <circle cx="210" cy="90"  r="4.5" fill="#ffb46a"/><text x="145" y="94"  text-anchor="end">A07 · 高端</text>
+    <circle cx="210" cy="160" r="4.5" fill="#ffb46a"/><text x="145" y="164" text-anchor="end">A06 · 低端</text>
+  </g>
+  <text x="55" y="118" font-size="10.5" fill="#9fc3e8">开路 12.38V</text>
+  <text x="55" y="188" font-size="10.5" fill="#9fc3e8">开路 3.49V</text>
+  <line x1="210" y1="90"  x2="450" y2="90"  stroke="#c8501e" stroke-width="3"/>
+  <line x1="210" y1="160" x2="450" y2="160" stroke="#1a5fa8" stroke-width="3"/>
+  <text x="310" y="82" font-size="11" fill="#c8501e">高端</text>
+  <text x="310" y="152" font-size="11" fill="#1a5fa8">低端</text>
+  <rect x="450" y="65" width="26" height="120" fill="#d5dde8"/>
+  <text x="463" y="58" text-anchor="middle" font-size="11" fill="#5a6b82">插头</text>
+  <circle cx="463" cy="90"  r="4" fill="#fff" stroke="#c8501e" stroke-width="2"/>
+  <circle cx="463" cy="160" r="4" fill="#fff" stroke="#1a5fa8" stroke-width="2"/>
+  <line x1="476" y1="90"  x2="530" y2="90"  stroke="#c8501e" stroke-width="3"/>
+  <line x1="476" y1="160" x2="530" y2="160" stroke="#1a5fa8" stroke-width="3"/>
+  <rect x="530" y="50" width="240" height="150" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="650" y="75" text-anchor="middle" font-size="13" font-weight="bold" fill="#12263f">计量单元 MeUn ★P0251</text>
+  <rect x="560" y="105" width="180" height="40" rx="5" fill="#12263f"/>
+  <text x="650" y="122" text-anchor="middle" fill="#fff" font-size="11">电磁线圈</text>
+  <text x="650" y="137" text-anchor="middle" fill="#ffb46a" font-size="11.5" font-weight="bold">R = 3.4Ω</text>
+  <text x="650" y="172" text-anchor="middle" font-size="11" fill="#5a6b82">pin2（高端）/ pin1（低端）</text>
+  <text x="650" y="190" text-anchor="middle" font-size="10.5" fill="#b3261e">断电测本体：0Ω或∞ → 直接换</text>
+  <rect x="30" y="230" width="940" height="50" rx="6" fill="#fff8ec" stroke="#f0dfc0"/>
+  <text x="45" y="250" font-size="12" fill="#8a6414" font-weight="bold">与PCV（P009B）共用高端供电路径：两码同时报 → 先查公共高端供电和保险</text>
+  <text x="45" y="269" font-size="11.5" fill="#8a6414">数据流验证：启动时MeUn控制电流≈1100mA → 电路正常，转油路机械排查</text>
+</svg>
+<div class="cap">图6-1 · 计量单元驱动电路图（高端A07 / 低端A06）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>计量单元驱动线束存在虚接、开路</h3>
+<ol class="st">
+<li>拔下计量单元插头，目测端子有无退针、油浸腐蚀，线束有无磨损（油泵区域线束易受油液侵蚀）。</li>
+<li>钥匙上电，测量插头（线束端）开路电压：<strong>pin2（高端）≈ 12.38V、pin1（低端）≈ 3.49V</strong>（见下图）。</li>
+<li>无电压或明显偏低 → 检查供电线束与保险；<strong>P009B同时报码时，优先查两者共用的公共高端供电段</strong>。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="130" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="85">pin2（高端）≈ 12.38V</text>
+    <text x="60" y="118">pin1（低端）≈ 3.49V</text>
+    <text x="60" y="146" fill="#1a5fa8">断电测本体电阻见原因2</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　1 / 2 脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="20" font-weight="bold" fill="#9df07a">12.38V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="760" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="760" y1="314" x2="760" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="760" y1="326" x2="760" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="640" y="330" width="180" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="658" y="342" width="144" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="700" y="365">1</text><text x="760" y="365">2</text>
+  </g>
+  <text x="730" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">计量单元插头（线束端，图示测2脚高端）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：两脚电压正常 → 线束供电正常，转原因2测本体</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">无电压 → 查供电线束与保险；P009B同报 → 先查公共高端供电段</text>
+</svg>
+<div class="cap">图6-2 · 驱动线束开路电压测量示意图（拔插头，Key-ON）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>计量单元本体失效</h3>
+<ol class="st">
+<li><strong>断电（Key-OFF）</strong>，拔下插头，测量<strong>计量单元本体 pin1–pin2 电阻 = 3.4Ω</strong>（见下图）。</li>
+<li>电阻 <strong>∞</strong> → 线圈开路，<strong>直接更换计量单元</strong>；电阻 <strong>0Ω</strong> → 线圈短路，直接更换。</li>
+<li>电阻正常 → 检查插头退针、线束虚接，必要时飞线验证。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="340" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="200" y="46" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">断电（Key-OFF）测本体电阻</text>
+  <text x="200" y="72" text-anchor="middle" font-size="12" fill="#12263f">标准：R = 3.4Ω · ∞=开路 · 0Ω=短路</text>
+  <text x="200" y="90" text-anchor="middle" font-size="10.5" fill="#5a6b82">测计量单元侧 pin1–pin2</text>
+  <rect x="90" y="330" width="240" height="70" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="210" y="372" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">计量单元 MeUn 本体</text>
+  <g font-size="12" font-weight="bold" fill="#c8501e">
+    <circle cx="150" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="150" y="318" text-anchor="middle">1</text>
+    <circle cx="270" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="270" y="318" text-anchor="middle">2</text>
+  </g>
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="22" font-weight="bold" fill="#9df07a">3.4Ω</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#c9a227"/><text x="103" y="153" fill="#fff">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="808" y1="287" x2="808" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="320" x2="270" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="270" y1="320" x2="270" y2="324" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="270" y1="324" x2="270" y2="330" stroke="#d9d9d9" stroke-width="3"/>
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="150" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="150" y1="300" x2="150" y2="322" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="150" y1="322" x2="150" y2="330" stroke="#9aa0a6" stroke-width="3"/>
+  <text x="330" y="312" font-size="11" fill="#b3261e">红表笔→pin2</text>
+  <text x="175" y="292" font-size="11" fill="#12263f">黑表笔→pin1</text>
+  <rect x="30" y="390" width="940" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="411" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：R=3.4Ω 正常 → 查插头/线束虚接；∞ 或 0Ω → 直接更换计量单元</text>
+</svg>
+<div class="cap">图6-3 · 计量单元本体电阻测量图（断电，电阻档）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>电脑板（ECU）驱动级问题</h3>
+<ol class="st">
+<li>线束（原因1）与本体（原因2）均正常后，检查ECU驱动级，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+<li>换板前读取数据流验证：<strong>启动时MeUn控制电流≈1100mA</strong> → 说明驱动电路实际工作正常，应停止电路排查，转<strong>油路机械排查</strong>（低压直通法、启动看回油量、判高压油泵机械故障）。</li>
+</ol>
+<div class="warn"><b>安全提醒：</b>共轨系统油压极高，涉及油路的测试严格按规范防护；交换ECU需确认硬件号/软件号一致并做好防盗匹配。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤七 · P009B ============ -->
+<section>
+<h2>步骤七 · P009B (轨压)压力控制阀(PCV)驱动电路开路<span class="d">与MeUn共用高端供电 · 针脚以实车图纸为准</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>轨压控制阀（PCV）驱动电路开路</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>轨压控制失效，轨压过高或无法建立；</li>
+  <li>动力受限，故障灯亮。</li>
+</ol>
+<div class="warn"><b>针脚说明：</b>所提供资料中未列出PCV的ECU针脚号，本节按<strong>功能描述</strong>（高端/低端）给出测量方法，具体针脚号请以实车整车电路图确认为准，切勿臆测。</div>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 300" width="100%" style="min-width:780px">
+  <rect x="30" y="50" width="180" height="150" rx="8" fill="#12263f"/>
+  <text x="120" y="40" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">ECU 驱动级</text>
+  <g font-size="12" fill="#fff">
+    <circle cx="210" cy="90"  r="4.5" fill="#ffb46a"/><text x="145" y="94"  text-anchor="end">高端驱动</text>
+    <circle cx="210" cy="160" r="4.5" fill="#ffb46a"/><text x="145" y="164" text-anchor="end">低端驱动</text>
+  </g>
+  <text x="55" y="118" font-size="10.5" fill="#9fc3e8">≈12V</text>
+  <text x="55" y="188" font-size="10.5" fill="#9fc3e8">≈3.5V</text>
+  <line x1="210" y1="90"  x2="450" y2="90"  stroke="#c8501e" stroke-width="3"/>
+  <line x1="210" y1="160" x2="450" y2="160" stroke="#1a5fa8" stroke-width="3"/>
+  <text x="310" y="82" font-size="11" fill="#c8501e">高端（与MeUn共用供电路径）</text>
+  <text x="310" y="152" font-size="11" fill="#1a5fa8">低端</text>
+  <rect x="450" y="65" width="26" height="120" fill="#d5dde8"/>
+  <text x="463" y="58" text-anchor="middle" font-size="11" fill="#5a6b82">插头</text>
+  <circle cx="463" cy="90"  r="4" fill="#fff" stroke="#c8501e" stroke-width="2"/>
+  <circle cx="463" cy="160" r="4" fill="#fff" stroke="#1a5fa8" stroke-width="2"/>
+  <line x1="476" y1="90"  x2="530" y2="90"  stroke="#c8501e" stroke-width="3"/>
+  <line x1="476" y1="160" x2="530" y2="160" stroke="#1a5fa8" stroke-width="3"/>
+  <rect x="530" y="50" width="240" height="150" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="650" y="75" text-anchor="middle" font-size="13" font-weight="bold" fill="#12263f">轨压控制阀 PCV ★P009B</text>
+  <rect x="560" y="105" width="180" height="40" rx="5" fill="#12263f"/>
+  <text x="650" y="122" text-anchor="middle" fill="#fff" font-size="11">电磁线圈</text>
+  <text x="650" y="137" text-anchor="middle" fill="#ffb46a" font-size="11.5" font-weight="bold">R = 几Ω级（参照同类）</text>
+  <text x="650" y="172" text-anchor="middle" font-size="11" fill="#5a6b82">高端 / 低端（两脚）</text>
+  <text x="650" y="190" text-anchor="middle" font-size="10.5" fill="#b3261e">断电测本体：0Ω或∞ → 直接换</text>
+  <rect x="30" y="230" width="940" height="50" rx="6" fill="#fff8ec" stroke="#f0dfc0"/>
+  <text x="45" y="250" font-size="12" fill="#8a6414" font-weight="bold">与MeUn（P0251）共用高端供电：两码同时报 → 先查公共高端供电和保险，再分别测本体</text>
+  <text x="45" y="269" font-size="11.5" fill="#8a6414">电压水平参照同类执行器：高端≈12V · 低端≈3.5V · 线圈电阻几Ω级</text>
+</svg>
+<div class="cap">图7-1 · PCV驱动电路图（功能性描述，针脚号以实车图纸为准）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>PCV驱动线束存在虚接、开路</h3>
+<ol class="st">
+<li>拔下PCV插头，目测端子有无退针、油浸腐蚀，线束有无磨损。</li>
+<li>钥匙上电，测量插头（线束端）：<strong>高端 ≈ 12V、低端 ≈ 3.5V</strong>（参照同类执行器驱动水平，见下图）。</li>
+<li>无电压或明显偏低 → 检查供电线束与保险；<strong>P0251同时报码时，优先查两者共用的公共高端供电段</strong>。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="130" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压参考（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="85">高端 ≈ 12V</text>
+    <text x="60" y="118">低端 ≈ 3.5V</text>
+    <text x="60" y="146" fill="#1a5fa8">断电测线圈电阻见原因2</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　高端 / 低端</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="22" font-weight="bold" fill="#9df07a">12V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="760" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="760" y1="314" x2="760" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="760" y1="326" x2="760" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="640" y="330" width="180" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="658" y="342" width="144" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="12" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="700" y="365">低端</text><text x="760" y="365">高端</text>
+  </g>
+  <text x="730" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">PCV插头（线束端，图示测高端，针脚以实车图纸为准）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：两端电压正常 → 线束供电正常，转原因2测本体</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">无电压 → 查供电线束与保险；P0251同报 → 先查公共高端供电段</text>
+</svg>
+<div class="cap">图7-2 · 驱动线束电压测量示意图（拔插头，Key-ON，功能性描述）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>PCV本体失效</h3>
+<ol class="st">
+<li><strong>断电（Key-OFF）</strong>，拔下插头，测量<strong>PCV本体线圈电阻：几Ω级</strong>（参照同类执行器，见下图）。</li>
+<li>电阻 <strong>∞</strong> → 线圈开路，<strong>直接更换PCV</strong>；电阻 <strong>0Ω</strong> → 线圈短路，直接更换。</li>
+<li>电阻正常 → 检查插头退针、线束虚接，必要时飞线验证。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="340" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="200" y="46" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">断电（Key-OFF）测本体电阻</text>
+  <text x="200" y="72" text-anchor="middle" font-size="12" fill="#12263f">参考：几Ω级 · ∞=开路 · 0Ω=短路</text>
+  <text x="200" y="90" text-anchor="middle" font-size="10.5" fill="#5a6b82">测PCV侧 高端–低端</text>
+  <rect x="90" y="330" width="240" height="70" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="210" y="372" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">轨压控制阀 PCV 本体</text>
+  <g font-size="11" font-weight="bold" fill="#c8501e">
+    <circle cx="150" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="150" y="318" text-anchor="middle">低端</text>
+    <circle cx="270" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="270" y="318" text-anchor="middle">高端</text>
+  </g>
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="22" font-weight="bold" fill="#9df07a">几Ω</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#c9a227"/><text x="103" y="153" fill="#fff">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="808" y1="287" x2="808" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="320" x2="270" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="270" y1="320" x2="270" y2="324" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="270" y1="324" x2="270" y2="330" stroke="#d9d9d9" stroke-width="3"/>
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="150" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="150" y1="300" x2="150" y2="322" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="150" y1="322" x2="150" y2="330" stroke="#9aa0a6" stroke-width="3"/>
+  <text x="330" y="312" font-size="11" fill="#b3261e">红表笔→高端</text>
+  <text x="175" y="292" font-size="11" fill="#12263f">黑表笔→低端</text>
+  <rect x="30" y="390" width="940" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="411" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：电阻几Ω级正常 → 查插头/线束虚接；∞ 或 0Ω → 直接更换PCV</text>
+</svg>
+<div class="cap">图7-3 · PCV本体电阻测量图（断电，电阻档）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>电脑板（ECU）驱动级问题</h3>
+<ol class="st">
+<li>线束（原因1）与本体（原因2）均正常后，检查ECU驱动级，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+<li>电路全部正常但轨压仍异常 → 转<strong>油路机械排查</strong>（PCV阀体卡滞、高压油泵机械故障）。</li>
+</ol>
+<div class="warn"><b>安全提醒：</b>共轨系统油压极高，油路测试严格按规范防护；交换ECU需确认硬件号/软件号一致并做好防盗匹配。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤八 · P21C7 ============ -->
+<section>
+<h2>步骤八 · P21C7 外部继电器开路故障（SCR主继电器）<span class="d">K22低端控制3.48V · 线圈83.3Ω · P208A的上游</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>SCR主继电器驱动电路开路</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>尿素系统断电停止工作，后处理失效；</li>
+  <li>发动机限扭（并可能连带报出 P208A 尿素泵开路码）。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 400" width="100%" style="min-width:780px">
+  <rect x="20" y="50" width="110" height="56" rx="6" fill="#12263f"/>
+  <text x="75" y="74" fill="#fff" font-size="12.5" text-anchor="middle">蓄电池12V</text>
+  <text x="75" y="93" fill="#9fc3e8" font-size="10" text-anchor="middle">常电</text>
+  <line x1="130" y1="78" x2="180" y2="78" stroke="#12263f" stroke-width="3"/>
+  <rect x="180" y="58" width="70" height="40" rx="5" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="215" y="82" fill="#12263f" font-size="12" text-anchor="middle">保险</text>
+  <line x1="250" y1="78" x2="310" y2="78" stroke="#12263f" stroke-width="3"/>
+  <rect x="310" y="20" width="240" height="150" rx="8" fill="#f3edf9" stroke="#d9c8ef"/>
+  <text x="430" y="42" text-anchor="middle" font-size="13" font-weight="bold" fill="#4a2b78">SCR主继电器 ★P21C7</text>
+  <line x1="330" y1="78" x2="530" y2="78" stroke="#4a2b78" stroke-width="3"/>
+  <rect x="400" y="66" width="60" height="24" rx="4" fill="#4a2b78"/>
+  <text x="430" y="82" text-anchor="middle" fill="#fff" font-size="10.5">触点</text>
+  <text x="340" y="64" font-size="10.5" fill="#4a2b78">30脚</text>
+  <text x="505" y="64" font-size="10.5" fill="#4a2b78">87脚</text>
+  <rect x="395" y="105" width="140" height="26" rx="4" fill="#4a2b78"/>
+  <text x="465" y="122" text-anchor="middle" fill="#fff" font-size="11">线圈 85↔86 = 83.3Ω</text>
+  <text x="415" y="148" font-size="10.5" fill="#4a2b78">85脚</text>
+  <text x="505" y="148" font-size="10.5" fill="#4a2b78">86脚</text>
+  <line x1="530" y1="78" x2="700" y2="78" stroke="#6a3ba8" stroke-width="3"/>
+  <line x1="700" y1="78" x2="700" y2="120" stroke="#6a3ba8" stroke-width="3"/>
+  <rect x="700" y="120" width="270" height="80" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="835" y="148" text-anchor="middle" font-size="13" font-weight="bold" fill="#12263f">尿素泵（柱塞泵）</text>
+  <text x="835" y="172" text-anchor="middle" font-size="11.5" fill="#12263f">pin3 = 12V电源（来自87脚）</text>
+  <text x="835" y="190" text-anchor="middle" font-size="10.5" fill="#b3261e">继电器开路 → 泵失电 → 连带报P208A</text>
+  <line x1="420" y1="131" x2="420" y2="255" stroke="#4a2b78" stroke-width="2.5"/>
+  <line x1="420" y1="255" x2="320" y2="255" stroke="#4a2b78" stroke-width="2.5"/>
+  <rect x="140" y="230" width="180" height="50" rx="6" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="230" y="251" text-anchor="middle" font-size="11.5" fill="#12263f">点火电源 12V</text>
+  <text x="230" y="269" text-anchor="middle" font-size="10.5" fill="#5a6b82">（85脚）</text>
+  <line x1="510" y1="131" x2="510" y2="285" stroke="#4a2b78" stroke-width="2.5"/>
+  <line x1="510" y1="285" x2="560" y2="285" stroke="#4a2b78" stroke-width="2.5"/>
+  <rect x="560" y="255" width="220" height="60" rx="8" fill="#12263f"/>
+  <text x="670" y="280" fill="#fff" font-size="12" text-anchor="middle">ECU　K22 低端控制（86脚）</text>
+  <text x="670" y="300" fill="#9fc3e8" font-size="11" text-anchor="middle">静态 ≈ 3.48V</text>
+  <rect x="20" y="335" width="950" height="48" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="35" y="355" font-size="12" fill="#1e7d43" font-weight="bold">排查顺序：插座30脚常电12V → 线圈电阻83.3Ω（∞换继电器）→ 86脚≈3.48V（无则查K22线束）→ 全正常查ECU</text>
+  <text x="35" y="373" font-size="11.5" fill="#5a6b82">修复继电器后清码，P208A同步消失即确认根因</text>
+</svg>
+<div class="cap">图8-1 · SCR主继电器电路图（30/87触点 · 85/86线圈 · K22低端控制）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>继电器插座、线束存在虚接、开路</h3>
+<ol class="st">
+<li>拔下SCR主继电器，目测插座触点有无烧蚀、松旷、进水、氧化。</li>
+<li>钥匙上电，测量继电器插座（线束端）：<strong>30脚 = 12V常电</strong>（无 → 查保险与上游线束）；<strong>85脚 = 12V</strong>（点火电源）。</li>
+<li>测 <strong>86脚对地 ≈ 3.48V</strong>（ECU K22低端静态电平）；无 → 查 K22 到 ECU 的线束通断（见下图）。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="140" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">插座电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="82">30脚（常电）= 12V</text>
+    <text x="60" y="110">85脚（点火电源）= 12V</text>
+    <text x="60" y="138">86脚（K22控制）≈ 3.48V</text>
+    <text x="60" y="162" fill="#1a5fa8">断电测线圈电阻见原因2</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插座</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　30/85/86脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="88" text-anchor="middle" font-size="24" font-weight="bold" fill="#9df07a">12V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="650" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="650" y1="314" x2="650" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="650" y1="326" x2="650" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="600" y="330" width="270" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="618" y="342" width="234" height="34" rx="6" fill="#4a2b78"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="650" y="365">30</text><text x="715" y="365">87</text><text x="780" y="365">85</text><text x="845" y="365">86</text>
+  </g>
+  <text x="735" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">SCR主继电器插座（线束端，图示测30脚）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：各脚电压正常 → 插座线路正常，转原因2测继电器</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">30脚无12V → 查保险；86脚无3.48V → 查K22到ECU线束</text>
+</svg>
+<div class="cap">图8-2 · 继电器插座电压测量示意图（拔继电器，Key-ON）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>继电器本体失效</h3>
+<ol class="st">
+<li><strong>断电（Key-OFF）</strong>，测量继电器 <strong>85–86 脚线圈电阻 = 83.3Ω</strong>（见下图）。</li>
+<li>电阻 <strong>∞</strong> → 线圈开路，<strong>直接更换继电器</strong>；电阻 0Ω 或明显偏小 → 线圈短路，直接更换。</li>
+<li>线圈正常 → 检查触点：30–87 脚常态应开路，线圈通 12V 后应吸合导通（可外接电源点触测试，听吸合声）。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="340" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="200" y="46" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">断电（Key-OFF）测线圈电阻</text>
+  <text x="200" y="72" text-anchor="middle" font-size="12" fill="#12263f">标准：R = 83.3Ω · ∞=开路 · 0Ω=短路</text>
+  <text x="200" y="90" text-anchor="middle" font-size="10.5" fill="#5a6b82">测继电器 85–86 脚</text>
+  <rect x="90" y="330" width="240" height="70" rx="8" fill="#f3edf9" stroke="#d9c8ef"/>
+  <text x="210" y="372" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#4a2b78">SCR主继电器 本体</text>
+  <g font-size="12" font-weight="bold" fill="#4a2b78">
+    <circle cx="150" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="150" y="318" text-anchor="middle">85</text>
+    <circle cx="270" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="270" y="318" text-anchor="middle">86</text>
+  </g>
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="20" font-weight="bold" fill="#9df07a">83.3Ω</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#c9a227"/><text x="103" y="153" fill="#fff">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="808" y1="287" x2="808" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="320" x2="270" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="270" y1="320" x2="270" y2="324" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="270" y1="324" x2="270" y2="330" stroke="#d9d9d9" stroke-width="3"/>
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="150" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="150" y1="300" x2="150" y2="322" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="150" y1="322" x2="150" y2="330" stroke="#9aa0a6" stroke-width="3"/>
+  <text x="330" y="312" font-size="11" fill="#b3261e">红表笔→86脚</text>
+  <text x="175" y="292" font-size="11" fill="#12263f">黑表笔→85脚</text>
+  <rect x="30" y="390" width="940" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="411" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：R=83.3Ω 正常 → 查触点吸合；∞ 或 0Ω → 直接更换继电器</text>
+</svg>
+<div class="cap">图8-3 · 继电器线圈电阻测量图（断电，电阻档）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>电脑板（ECU）低端驱动问题</h3>
+<ol class="st">
+<li>插座线路（原因1）与继电器（原因2）均正常后，检查 ECU K22 低端驱动级，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+<li>修复后清码验证：<strong>P208A 同步消失即确认继电器开路是上游根因</strong>。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤九 · P208A ============ -->
+<section>
+<h2>步骤九 · P208A 柱塞泵（尿素泵）驱动电路开路<span class="d">pin3=12V(继电器) / pin2=A10控制3.46V / pin4=K02地</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>尿素泵（柱塞泵）驱动电路开路</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>尿素不建压、不喷射，后处理失效；</li>
+  <li>发动机限扭。</li>
+</ol>
+<div class="warn"><b>关联提醒：</b>P208A 与 P21C7 为因果关联——SCR主继电器开路会导致尿素泵失去12V电源。<strong>请先完成步骤八排查，再进行本节</strong>。</div>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 340" width="100%" style="min-width:780px">
+  <rect x="30" y="55" width="200" height="56" rx="6" fill="#f3edf9" stroke="#d9c8ef"/>
+  <text x="130" y="79" text-anchor="middle" font-size="12" font-weight="bold" fill="#4a2b78">SCR主继电器 87脚</text>
+  <text x="130" y="98" text-anchor="middle" font-size="10.5" fill="#4a2b78">12V（步骤八已确认）</text>
+  <rect x="30" y="145" width="200" height="56" rx="6" fill="#12263f"/>
+  <text x="130" y="169" text-anchor="middle" font-size="12" fill="#fff">ECU　A10 泵电机控制</text>
+  <text x="130" y="188" text-anchor="middle" font-size="10.5" fill="#9fc3e8">静态 ≈ 3.46V</text>
+  <rect x="30" y="235" width="200" height="56" rx="6" fill="#12263f"/>
+  <text x="130" y="259" text-anchor="middle" font-size="12" fill="#fff">ECU　K02 接地</text>
+  <text x="130" y="278" text-anchor="middle" font-size="10.5" fill="#9fc3e8">0V</text>
+  <line x1="230" y1="83" x2="600" y2="83" stroke="#c8501e" stroke-width="3"/>
+  <line x1="230" y1="173" x2="600" y2="173" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="230" y1="263" x2="600" y2="263" stroke="#12263f" stroke-width="3"/>
+  <g font-size="11.5" text-anchor="middle" font-weight="bold">
+    <text x="415" y="73" fill="#c8501e">12V电源</text>
+    <text x="415" y="163" fill="#1a5fa8">电机控制</text>
+    <text x="415" y="253" fill="#12263f">地线</text>
+  </g>
+  <rect x="600" y="55" width="370" height="236" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="785" y="42" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">尿素泵（柱塞泵）★P208A</text>
+  <g font-size="12.5" font-weight="bold" fill="#12263f">
+    <circle cx="600" cy="83" r="5" fill="#fff" stroke="#c8501e" stroke-width="2"/>
+    <text x="618" y="88">pin3 = 12V电源</text>
+    <circle cx="600" cy="173" r="5" fill="#fff" stroke="#1a5fa8" stroke-width="2"/>
+    <text x="618" y="178">pin2 = 电机控制（≈3.46V）</text>
+    <circle cx="600" cy="263" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="618" y="268">pin4 = 接地（K02）</text>
+  </g>
+  <rect x="30" y="305" width="940" height="30" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="325" font-size="12" fill="#1e7d43" font-weight="bold">顺序：pin3无12V → 回步骤八查继电器链路；12V正常 → 测pin2/pin4 → 全正常 → 换尿素泵</text>
+</svg>
+<div class="cap">图9-1 · 尿素泵供电与控制电路图（pin3电源 / pin2控制 / pin4地）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>尿素泵12V电源缺失（上游继电器链路）</h3>
+<ol class="st">
+<li>钥匙上电，测量尿素泵插头（线束端）<strong>pin3 对地 = 12V</strong>（见下图）。</li>
+<li>无12V → <strong>回到步骤八</strong>，依次查保险 → SCR主继电器（线圈83.3Ω）→ K22控制线路。</li>
+<li>有12V → 转原因2。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="130" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">插头电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="85">pin3（电源）= 12V</text>
+    <text x="60" y="118">pin2（控制）≈ 3.46V</text>
+    <text x="60" y="146">pin4（地线）= 0V</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　2 / 3 / 4 脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="88" text-anchor="middle" font-size="24" font-weight="bold" fill="#9df07a">12V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="715" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="715" y1="314" x2="715" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="715" y1="326" x2="715" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="600" y="330" width="210" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="618" y="342" width="174" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="650" y="365">2</text><text x="715" y="365">3</text><text x="780" y="365">4</text>
+  </g>
+  <text x="705" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">尿素泵插头（线束端，图示测3脚电源）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：pin3=12V → 供电正常，转原因2</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">pin3无12V → 回步骤八查SCR主继电器链路（保险→继电器→K22线路）</text>
+</svg>
+<div class="cap">图9-2 · 尿素泵插头电压测量示意图（拔插头，Key-ON）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>控制线、接地线存在虚接、开路</h3>
+<ol class="st">
+<li>测 <strong>pin2 ≈ 3.46V</strong>（Key-ON静态，见图9-2）；无电压 → 查 A10 到 ECU 的控制线束通断。</li>
+<li><strong>断电</strong>测 <strong>pin4 对地电阻 &lt; 1Ω</strong>；不导通 → 查 K02 接地线束与搭铁点有无锈蚀松动。</li>
+</ol>
+<div class="judge"><b>判定：</b>pin2、pin4 均正常 → 控制与接地回路完好，转原因3；异常 → 修复对应线束后清码验证。</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>尿素泵本体失效</h3>
+<ol class="st">
+<li><strong>pin3=12V、pin2≈3.46V、pin4接地良好</strong>，全部正常仍报开路码 → 尿素泵本体内部开路，<strong>更换尿素泵</strong>。</li>
+<li>更换后清码，做后处理建压测试验证。</li>
+</ol>
+<div class="judge"><b>判定：</b>供电、控制、接地三项全正常是换泵的前置条件，缺一不可，避免误判换件。</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）问题</h3>
+<ol class="st">
+<li>以上原因1~3全部检查正常后，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤十 · P213A ============ -->
+<section>
+<h2>步骤十 · P213A 废气再循环(EGR)H桥驱动电路开路<span class="d">电机2.8Ω · 位置传感器属5V供电模块1</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>EGR阀H桥驱动电路开路</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>EGR阀不动作、退出工作，排放恶化；</li>
+  <li>故障灯亮，可能发动机限扭。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 400" width="100%" style="min-width:780px">
+  <rect x="30" y="40" width="190" height="300" rx="8" fill="#12263f"/>
+  <text x="125" y="30" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">ECU</text>
+  <g font-size="11.5" fill="#fff">
+    <circle cx="220" cy="80"  r="4.5" fill="#ffb46a"/><text x="150" y="84"  text-anchor="end">A67 控制+</text>
+    <circle cx="220" cy="140" r="4.5" fill="#ffb46a"/><text x="150" y="144" text-anchor="end">A88 控制-</text>
+    <circle cx="220" cy="200" r="4.5" fill="#ffb46a"/><text x="150" y="204" text-anchor="end">A40 模块1</text>
+    <circle cx="220" cy="260" r="4.5" fill="#ffb46a"/><text x="150" y="264" text-anchor="end">A79 信号</text>
+    <circle cx="220" cy="320" r="4.5" fill="#ffb46a"/><text x="150" y="324" text-anchor="end">A78 接地</text>
+  </g>
+  <g font-size="10" fill="#9fc3e8">
+    <text x="45" y="108">开路1.88V</text>
+    <text x="45" y="168">开路1.14V</text>
+    <text x="45" y="228">5V</text>
+    <text x="45" y="288">开路5V</text>
+    <text x="45" y="348">0V</text>
+  </g>
+  <line x1="220" y1="80"  x2="560" y2="80"  stroke="#c8501e" stroke-width="3"/>
+  <line x1="220" y1="140" x2="560" y2="140" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="220" y1="200" x2="560" y2="200" stroke="#1e7d43" stroke-width="3"/>
+  <line x1="220" y1="260" x2="560" y2="260" stroke="#6a3ba8" stroke-width="3"/>
+  <line x1="220" y1="320" x2="560" y2="320" stroke="#12263f" stroke-width="3"/>
+  <g font-size="11" font-weight="bold">
+    <text x="330" y="72" fill="#c8501e">控制+</text>
+    <text x="330" y="132" fill="#1a5fa8">控制-</text>
+    <text x="330" y="192" fill="#1e7d43">5V</text>
+    <text x="330" y="252" fill="#6a3ba8">位置信号</text>
+    <text x="330" y="312" fill="#12263f">地线</text>
+  </g>
+  <rect x="560" y="55" width="26" height="290" fill="#d5dde8"/>
+  <text x="573" y="48" text-anchor="middle" font-size="11" fill="#5a6b82">插头</text>
+  <circle cx="573" cy="80"  r="4" fill="#fff" stroke="#c8501e" stroke-width="2"/>
+  <circle cx="573" cy="140" r="4" fill="#fff" stroke="#1a5fa8" stroke-width="2"/>
+  <circle cx="573" cy="200" r="4" fill="#fff" stroke="#1e7d43" stroke-width="2"/>
+  <circle cx="573" cy="260" r="4" fill="#fff" stroke="#6a3ba8" stroke-width="2"/>
+  <circle cx="573" cy="320" r="4" fill="#fff" stroke="#12263f" stroke-width="2"/>
+  <line x1="586" y1="80"  x2="640" y2="80"  stroke="#c8501e" stroke-width="3"/>
+  <line x1="586" y1="140" x2="640" y2="140" stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="586" y1="200" x2="640" y2="200" stroke="#1e7d43" stroke-width="3"/>
+  <line x1="586" y1="260" x2="640" y2="260" stroke="#6a3ba8" stroke-width="3"/>
+  <line x1="586" y1="320" x2="640" y2="320" stroke="#12263f" stroke-width="3"/>
+  <rect x="640" y="40" width="330" height="300" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="805" y="30" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">EGR阀 ★P213A</text>
+  <rect x="662" y="58" width="286" height="112" rx="6" fill="#fff" stroke="#d5dde8"/>
+  <text x="805" y="76" text-anchor="middle" font-size="12" font-weight="bold" fill="#12263f">驱动电机（H桥驱动）</text>
+  <g font-size="11.5" fill="#12263f">
+    <circle cx="662" cy="80" r="4" fill="#fff" stroke="#c8501e" stroke-width="2"/>
+    <text x="674" y="98">pin1 控制+</text>
+    <circle cx="662" cy="140" r="4" fill="#fff" stroke="#1a5fa8" stroke-width="2"/>
+    <text x="674" y="158">pin3 控制-</text>
+  </g>
+  <text x="805" y="140" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#b3261e">电机 R = 2.8Ω</text>
+  <rect x="662" y="182" width="286" height="140" rx="6" fill="#fff" stroke="#d5dde8"/>
+  <text x="805" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#12263f">位置传感器</text>
+  <g font-size="11.5" fill="#12263f">
+    <circle cx="662" cy="200" r="4" fill="#fff" stroke="#1e7d43" stroke-width="2"/>
+    <text x="674" y="218">pin6 = 5V（模块1）</text>
+    <circle cx="662" cy="260" r="4" fill="#fff" stroke="#6a3ba8" stroke-width="2"/>
+    <text x="674" y="278">pin5 = 位置信号</text>
+    <circle cx="662" cy="320" r="4" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="674" y="314">pin4 = 接地</text>
+  </g>
+  <rect x="30" y="355" width="940" height="38" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="379" font-size="12" fill="#1e7d43" font-weight="bold">H桥开路主查 pin1–pin3 电机回路（2.8Ω）；pin6 无5V → 回步骤一查5V供电模块1</text>
+</svg>
+<div class="cap">图10-1 · EGR阀电路图（驱动电机 pin1/pin3 · 位置传感器 pin6/pin5/pin4）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>EGR阀驱动线束存在虚接、开路</h3>
+<ol class="st">
+<li>拔下EGR阀插头，目测端子有无退针、进水、氧化，线束根部有无折断。</li>
+<li>钥匙上电，测量插头（线束端）：<strong>pin1（控制+）≈ 1.88V、pin3（控制-）≈ 1.14V、pin6 = 5V、pin4 = 0V</strong>（见下图）。</li>
+<li>pin6 无5V → 回<strong>步骤一</strong>查5V供电模块1；控制电压异常 → 查 A67/A88 到 ECU 的线束通断或飞线。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 460" width="100%" style="min-width:760px">
+  <rect x="30" y="25" width="300" height="150" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="180" y="50" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">开路电压标准（Key-ON）</text>
+  <g font-size="12.5" fill="#12263f">
+    <text x="60" y="80">pin1（控制+）≈ 1.88V</text>
+    <text x="60" y="108">pin3（控制-）≈ 1.14V</text>
+    <text x="60" y="136">pin6（5V模块1）= 5V</text>
+    <text x="60" y="164">pin4（地线）= 0V</text>
+  </g>
+  <rect x="800" y="25" width="185" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="814" y="49" font-size="11.5" fill="#12263f">黑表笔 → 车身搭铁点</text>
+  <text x="814" y="71" font-size="11.5" fill="#b3261e">红表笔 → 点测插头</text>
+  <text x="814" y="91" font-size="11.5" fill="#b3261e">　　　1/3/6/4 脚</text>
+  <g transform="translate(420,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="20" font-weight="bold" fill="#9df07a">1.88V</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="153" fill="#333">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="472" y1="287" x2="472" y2="320" stroke="#12263f" stroke-width="3"/>
+  <line x1="472" y1="320" x2="472" y2="342" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="472" y1="342" x2="472" y2="352" stroke="#9aa0a6" stroke-width="3"/>
+  <line x1="472" y1="352" x2="472" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="450" y1="360" x2="494" y2="360" stroke="#12263f" stroke-width="3"/>
+  <line x1="458" y1="368" x2="486" y2="368" stroke="#12263f" stroke-width="3"/>
+  <line x1="466" y1="376" x2="478" y2="376" stroke="#12263f" stroke-width="3"/>
+  <line x1="538" y1="287" x2="538" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="538" y1="314" x2="620" y2="314" stroke="#b3261e" stroke-width="3"/>
+  <line x1="620" y1="314" x2="620" y2="326" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="620" y1="326" x2="620" y2="331" stroke="#d9d9d9" stroke-width="3"/>
+  <rect x="580" y="330" width="290" height="58" rx="10" fill="#2f2f2f"/>
+  <rect x="598" y="342" width="254" height="34" rx="6" fill="#c8501e"/>
+  <g font-size="14" fill="#ffe28a" text-anchor="middle" font-weight="bold">
+    <text x="620" y="365">1</text><text x="670" y="365">3</text><text x="725" y="365">4</text><text x="775" y="365">5</text><text x="830" y="365">6</text>
+  </g>
+  <text x="725" y="405" text-anchor="middle" font-size="11" fill="#5a6b82">EGR阀插头（线束端，图示测1脚控制+）</text>
+  <rect x="30" y="412" width="940" height="40" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="429" font-size="12" fill="#1e7d43" font-weight="bold">判定：各脚电压正常 → 线束无开路，转原因2测电机</text>
+  <text x="45" y="446" font-size="12" fill="#b3261e" font-weight="bold">pin6无5V → 回步骤一查供电模块1；控制电压异常 → 查A67/A88线束</text>
+</svg>
+<div class="cap">图10-2 · 开路电压测量示意图（拔插头，Key-ON）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>EGR阀电机本体失效</h3>
+<ol class="st">
+<li><strong>断电（Key-OFF）</strong>，拔下插头，测量<strong>阀本体 pin1–pin3 电阻 = 2.8Ω</strong>（见下图）。</li>
+<li>电阻 <strong>∞</strong> → 电机开路，<strong>直接更换EGR阀总成</strong>；电阻 <strong>0Ω</strong> → 电机短路，直接更换。</li>
+<li>电阻正常 → 检查插头退针、线束虚接。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="340" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="200" y="46" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">断电（Key-OFF）测电机电阻</text>
+  <text x="200" y="72" text-anchor="middle" font-size="12" fill="#12263f">标准：R = 2.8Ω · ∞=开路 · 0Ω=短路</text>
+  <text x="200" y="90" text-anchor="middle" font-size="10.5" fill="#5a6b82">测EGR阀侧 pin1–pin3</text>
+  <rect x="90" y="330" width="240" height="70" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="210" y="372" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">EGR阀 电机本体</text>
+  <g font-size="12" font-weight="bold" fill="#c8501e">
+    <circle cx="150" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="150" y="318" text-anchor="middle">1</text>
+    <circle cx="270" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="270" y="318" text-anchor="middle">3</text>
+  </g>
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="22" font-weight="bold" fill="#9df07a">2.8Ω</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#c9a227"/><text x="103" y="153" fill="#fff">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="808" y1="287" x2="808" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="320" x2="270" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="270" y1="320" x2="270" y2="324" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="270" y1="324" x2="270" y2="330" stroke="#d9d9d9" stroke-width="3"/>
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="150" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="150" y1="300" x2="150" y2="322" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="150" y1="322" x2="150" y2="330" stroke="#9aa0a6" stroke-width="3"/>
+  <text x="330" y="312" font-size="11" fill="#b3261e">红表笔→pin3</text>
+  <text x="175" y="292" font-size="11" fill="#12263f">黑表笔→pin1</text>
+  <rect x="30" y="390" width="940" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="411" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：R=2.8Ω 正常 → 查插头/线束虚接；∞ 或 0Ω → 直接更换EGR阀总成</text>
+</svg>
+<div class="cap">图10-3 · EGR阀电机电阻测量图（断电，电阻档）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>位置传感器供电/反馈异常（牵连H桥保护）</h3>
+<ol class="st">
+<li>位置反馈异常会使ECU关闭H桥驱动并报开路码：确认 <strong>pin6 = 5V</strong>（5V供电模块1，异常回<strong>步骤一</strong>）、<strong>pin4 接地良好</strong>（见图10-2）。</li>
+<li>供电与接地正常仍报码 → 位置传感器内部故障，<strong>更换EGR阀总成</strong>。</li>
+</ol>
+<div class="judge"><b>判定：</b>P213A 与 P0193/P0242 同报时，优先在步骤一排除供电模块1问题，往往可连带消除。</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）H桥驱动级问题</h3>
+<ol class="st">
+<li>线束（原因1）、电机（原因2）、位置传感器供电（原因3）均正常后，检查ECU H桥驱动级，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤十一 · P203F ============ -->
+<section>
+<h2>步骤十一 · P203F 尿素液位低激活限扭<span class="d">先看实物，再查CAN2通讯（60Ω）</span></h2>
+
+<p style="margin:6px 0;"><b>ECU系统：</b>博世 MD1CS089　　<b>故障说明：</b>尿素液位低，激活发动机限扭</p>
+<p style="margin:6px 0 4px;"><b>导致现象：</b></p>
+<ol style="margin-left:22px;">
+  <li>发动机扭矩受限（限扭直接激活）；</li>
+  <li>仪表尿素液位报警，故障灯亮。</li>
+</ol>
+
+<h4 style="margin:16px 0 4px; font-size:15px;">相关电路图</h4>
+<div class="fig">
+<svg viewBox="0 0 1000 340" width="100%" style="min-width:780px">
+  <rect x="30" y="40" width="190" height="140" rx="8" fill="#12263f"/>
+  <text x="125" y="30" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">ECU（CAN2）</text>
+  <g font-size="12" fill="#fff">
+    <circle cx="220" cy="80"  r="4.5" fill="#ffb46a"/><text x="150" y="84"  text-anchor="end">K81 CAN2H</text>
+    <circle cx="220" cy="140" r="4.5" fill="#ffb46a"/><text x="150" y="144" text-anchor="end">K80 CAN2L</text>
+  </g>
+  <g font-size="10.5" fill="#9fc3e8">
+    <text x="50" y="108">3V</text>
+    <text x="50" y="168">2V</text>
+  </g>
+  <rect x="30" y="210" width="190" height="46" rx="6" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="125" y="238" text-anchor="middle" font-size="11.5" fill="#12263f">蓄电池12V（经保险）</text>
+  <rect x="30" y="272" width="190" height="42" rx="6" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="125" y="298" text-anchor="middle" font-size="11.5" fill="#12263f">车身搭铁</text>
+  <line x1="220" y1="80"  x2="620" y2="80"  stroke="#1a5fa8" stroke-width="3"/>
+  <line x1="220" y1="140" x2="620" y2="140" stroke="#1e7d43" stroke-width="3"/>
+  <line x1="220" y1="233" x2="620" y2="233" stroke="#c8501e" stroke-width="3"/>
+  <line x1="220" y1="293" x2="620" y2="293" stroke="#12263f" stroke-width="3"/>
+  <g font-size="11.5" text-anchor="middle" font-weight="bold">
+    <text x="420" y="70" fill="#1a5fa8">CAN-H</text>
+    <text x="420" y="130" fill="#1e7d43">CAN-L</text>
+    <text x="420" y="223" fill="#c8501e">12V电源</text>
+    <text x="420" y="283" fill="#12263f">地线</text>
+  </g>
+  <rect x="620" y="40" width="350" height="274" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="795" y="30" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#12263f">尿素箱（液位/品质传感器）★P203F</text>
+  <g font-size="12" fill="#12263f">
+    <circle cx="620" cy="80"  r="4.5" fill="#fff" stroke="#1a5fa8" stroke-width="2"/>
+    <text x="638" y="85">pin4 = CAN-H</text>
+    <circle cx="620" cy="140" r="4.5" fill="#fff" stroke="#1e7d43" stroke-width="2"/>
+    <text x="638" y="145">pin3 = CAN-L</text>
+    <circle cx="620" cy="233" r="4.5" fill="#fff" stroke="#c8501e" stroke-width="2"/>
+    <text x="638" y="238">电源 = 12V</text>
+    <circle cx="620" cy="293" r="4.5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="638" y="298">接地</text>
+  </g>
+  <rect x="660" y="160" width="270" height="46" rx="5" fill="#12263f"/>
+  <text x="795" y="179" text-anchor="middle" fill="#fff" font-size="11">断电5分钟后测插头线束端</text>
+  <text x="795" y="197" text-anchor="middle" fill="#ffb46a" font-size="11.5" font-weight="bold">CAN-H ↔ CAN-L = 60Ω</text>
+</svg>
+<div class="cap">图11-1 · 尿素液位/品质传感器电路图（CAN2通讯 + 12V供电）</div>
+</div>
+
+<h4 style="margin:18px 0 6px; font-size:15px;">产生原因及排查步骤（按顺序执行，一项排除后再查下一项）</h4>
+
+<div class="cause">
+<h3><span class="no">原因 1</span>尿素液位真实过低（最常见）</h3>
+<ol class="st">
+<li>打开尿素箱盖，查看<strong>实际液位</strong>。</li>
+<li>液位低 → <strong>加注合格车用尿素（32.5%）</strong>，清除故障码即可。</li>
+<li>液位正常仍报码 → 转原因2。</li>
+</ol>
+<div class="judge"><b>判定：</b>P203F 多数情况就是真实缺尿素，先花1分钟开盖确认，避免直接拆件。</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 2</span>液位传感器 CAN2 通讯异常</h3>
+<ol class="st">
+<li><strong>断开电源总闸，等待 5 分钟</strong>，测量尿素品质/液位传感器插头（线束端）<strong>CAN-H（pin4）与 CAN-L（pin3）之间电阻 = 60Ω</strong>（见下图）。</li>
+<li>不符 → 查 CAN2 支路线束（通断、对地/对电源短路）；钥匙上电时 CAN-H ≈ <strong>3V</strong>（K81）、CAN-L ≈ <strong>2V</strong>（K80）。</li>
+<li>60Ω 正常 → 转原因3。</li>
+</ol>
+<div class="fig">
+<svg viewBox="0 0 1000 430" width="100%" style="min-width:760px">
+  <rect x="30" y="20" width="340" height="76" rx="8" fill="#eef3f9" stroke="#d5dde8"/>
+  <text x="200" y="46" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#12263f">断电总闸5分钟后测CAN终端电阻</text>
+  <text x="200" y="72" text-anchor="middle" font-size="12" fill="#12263f">标准：CAN-H ↔ CAN-L = 60Ω</text>
+  <text x="200" y="90" text-anchor="middle" font-size="10.5" fill="#5a6b82">测插头线束端 pin4–pin3</text>
+  <rect x="90" y="330" width="240" height="70" rx="8" fill="#2f2f2f"/>
+  <rect x="108" y="346" width="204" height="38" rx="6" fill="#c8501e"/>
+  <g font-size="12" font-weight="bold" fill="#ffe28a">
+    <circle cx="150" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="150" y="376" text-anchor="middle">4</text>
+    <circle cx="270" cy="330" r="5" fill="#fff" stroke="#12263f" stroke-width="2"/>
+    <text x="270" y="376" text-anchor="middle">3</text>
+  </g>
+  <text x="210" y="318" text-anchor="middle" font-size="11.5" fill="#12263f" font-weight="bold">尿素品质传感器插头（线束端）</text>
+  <g transform="translate(690,15)">
+    <rect x="0" y="0" width="170" height="300" rx="20" fill="#d43a2f"/>
+    <rect x="5" y="5" width="160" height="290" rx="17" fill="none" stroke="#a82a21" stroke-width="2"/>
+    <rect x="14" y="14" width="142" height="272" rx="10" fill="#3a3f45"/>
+    <rect x="24" y="24" width="122" height="106" rx="6" fill="#14161a"/>
+    <rect x="32" y="42" width="106" height="70" rx="3" fill="#20252b"/>
+    <text x="85" y="86" text-anchor="middle" font-size="22" font-weight="bold" fill="#9df07a">60Ω</text>
+    <g font-size="8.5" text-anchor="middle">
+      <rect x="16" y="140" width="30" height="18" rx="4" fill="#e05252"/><text x="31" y="153" fill="#fff">开关</text>
+      <rect x="52" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="153" fill="#333">电压</text>
+      <rect x="88" y="140" width="30" height="18" rx="4" fill="#c9a227"/><text x="103" y="153" fill="#fff">电阻</text>
+      <rect x="124" y="140" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="153" fill="#333">电流</text>
+      <rect x="16" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="31" y="177" fill="#333">照明</text>
+      <rect x="52" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="67" y="177" fill="#333">试灯</text>
+      <rect x="88" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="103" y="177" fill="#333">高级</text>
+      <rect x="124" y="164" width="30" height="18" rx="4" fill="#e8e8e8"/><text x="139" y="177" fill="#333">返回</text>
+    </g>
+    <circle cx="85" cy="225" r="30" fill="#6b7178"/>
+    <circle cx="85" cy="225" r="30" fill="none" stroke="#565b61" stroke-width="2"/>
+    <circle cx="85" cy="225" r="13" fill="#c9ced3"/>
+    <text x="85" y="229" text-anchor="middle" font-size="8.5" fill="#333">确认</text>
+    <path d="M85,201 l6,9 h-12 z" fill="#e8e8e8"/>
+    <path d="M85,249 l6,-9 h-12 z" fill="#e8e8e8"/>
+    <path d="M61,225 l9,-6 v12 z" fill="#e8e8e8"/>
+    <path d="M109,225 l-9,-6 v12 z" fill="#e8e8e8"/>
+    <circle cx="52" cy="272" r="10" fill="#101216"/>
+    <circle cx="52" cy="272" r="4.5" fill="#000"/>
+    <circle cx="118" cy="272" r="10" fill="#b3261e"/>
+    <circle cx="118" cy="272" r="4.5" fill="#5e0f0f"/>
+  </g>
+  <line x1="808" y1="287" x2="808" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="808" y1="320" x2="270" y2="320" stroke="#b3261e" stroke-width="3"/>
+  <line x1="270" y1="320" x2="270" y2="324" stroke="#b3261e" stroke-width="11" stroke-linecap="round"/>
+  <line x1="270" y1="324" x2="270" y2="330" stroke="#d9d9d9" stroke-width="3"/>
+  <line x1="742" y1="287" x2="742" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="742" y1="300" x2="150" y2="300" stroke="#12263f" stroke-width="3"/>
+  <line x1="150" y1="300" x2="150" y2="322" stroke="#12263f" stroke-width="11" stroke-linecap="round"/>
+  <line x1="150" y1="322" x2="150" y2="330" stroke="#9aa0a6" stroke-width="3"/>
+  <text x="330" y="312" font-size="11" fill="#b3261e">红表笔→pin3(CAN-L)</text>
+  <text x="175" y="292" font-size="11" fill="#12263f">黑表笔→pin4(CAN-H)</text>
+  <rect x="30" y="390" width="940" height="32" rx="6" fill="#f3f8f4" stroke="#cfe5d5"/>
+  <text x="45" y="411" font-size="12.5" fill="#1e7d43" font-weight="bold">判定：60Ω 正常 → 转原因3；不符 → 查CAN2支路线束或传感器内终端电阻</text>
+</svg>
+<div class="cap">图11-2 · CAN2终端电阻测量图（断电总闸5分钟后，电阻档）</div>
+</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 3</span>液位/品质传感器供电、接地或本体故障</h3>
+<ol class="st">
+<li>钥匙上电，查传感器<strong>12V供电与接地</strong>是否正常（见图11-1）；异常 → 查对应线束与保险。</li>
+<li>供电、接地、CAN 全部正常仍报码 → <strong>更换尿素液位/品质传感器总成</strong>。</li>
+</ol>
+<div class="judge"><b>判定：</b>液位真实正常 + CAN 60Ω正常 + 供电接地正常，三项齐备才换传感器总成。</div>
+</div>
+
+<div class="cause">
+<h3><span class="no">原因 4</span>电脑板（ECU）或数据问题</h3>
+<ol class="st">
+<li>以上原因1~3全部检查正常后，可考虑<strong>数据问题或交换电脑板</strong>进行对比测试。</li>
+</ol>
+<div class="warn"><b>换板前注意：</b>交换ECU需确认硬件号/软件号一致，并做好防盗与数据匹配；ECU是最后更换项。</div>
+</div>
+
+</section>
+
+<!-- ============ 步骤十二 ============ -->
+<section>
+<h2>步骤十二 · 清码路试<span class="d">所有维修完成后统一执行</span></h2>
+<ol class="st">
+<li>清除全部故障码，Key-ON 复查无现存码。</li>
+<li>路试确认：动力恢复（限扭解除）、尿素系统建压正常、无故障灯。</li>
+<li>任一故障码复现 → 回到对应步骤，重点查线束磨破点和插头虚接。</li>
+</ol>
+<div class="warn"><strong>安全提醒：</strong>测电阻/通断必须先断电；共轨系统油压极高，涉及油路的测试严格按规范防护。表中电压/电阻为厂家参考标准值，非本车实测值。</div>
+</section>
+
+<!-- ============ 速查表 ============ -->
+<section>
+<h2>附 · 测量速查表</h2>
+<table>
+<tr><th>部件</th><th>ECU针脚</th><th>插头脚（供电/信号/地）</th><th>开路电压</th><th>本体电阻</th></tr>
+<tr><td>轨压传感器</td><td>A42 / A62 / A63</td><td>pin3 / pin2 / pin1</td><td>5V / 5V / 0V</td><td>—</td></tr>
+<tr><td>增压压力传感器</td><td>A41 / A60 / A82</td><td>pin3 / pin4 / pin1</td><td>5V / 5.7V / 0V</td><td>—</td></tr>
+<tr><td>空气流量计</td><td>K59 / K86 / K87</td><td>pin4 / pin3 / pin2</td><td>5V / 0V或5V / 0V</td><td>—</td></tr>
+<tr><td>SCR上游排温</td><td>A36 / K26</td><td>pin1 / pin2</td><td>5V / 0V</td><td>200℃≈350Ω</td></tr>
+<tr><td>计量单元MeUn</td><td>A07 / A06</td><td>pin2 / pin1</td><td>12.38V / 3.49V</td><td><b>3.4Ω</b></td></tr>
+<tr><td>EGR阀电机</td><td>A67 / A88</td><td>pin1 / pin3</td><td>1.88V / 1.14V</td><td><b>2.8Ω</b></td></tr>
+<tr><td>SCR主继电器</td><td>K22</td><td>86脚</td><td>3.48V</td><td><b>83.3Ω</b></td></tr>
+<tr><td>尿素泵电机</td><td>A10 / (12V) / K02</td><td>pin2 / pin3 / pin4</td><td>3.46V / 12V / 0V</td><td>—</td></tr>
+<tr><td>尿素液位传感器</td><td>K81 / K80（CAN2）</td><td>H / L</td><td>3V / 2V</td><td>CAN H-L间60Ω</td></tr>
+</table>
+<div class="warn" style="margin-top:4px"><span class="fc">P213A</span> EGR阀提醒：H桥开路码与位置传感器供电（5V模块1）相关，与P0193/P0242同报时先在步骤一排除公共供电，详细排查见<strong>步骤十</strong>。</div>
+</section>
+
+<footer style="text-align:center; color:#5a6b82; font-size:12.5px; margin-top:24px;">MD1CS089 快速排查手册 V6 · 2026-09-29 · 新增故障总结与主因分析（先修主因→清码验证→剩余码进详解）</footer>
+</div>
+</body>
+</html>
